@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pet Anime Video</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <main class="container">
+      <h1>Pet Anime Video (MVP)</h1>
+      <p class="muted">Upload images + prompt (+ optional storyboard) → 15s 720p MP4. Cloud providers are pluggable; local backend always works.</p>
+
+      <section class="card">
+        <label>Prompt</label>
+        <textarea id="prompt" rows="3" placeholder="A cozy hand-drawn anime scene...">A cozy hand-drawn anime scene with a small pet hero, watercolor backgrounds, gentle lighting.</textarea>
+
+        <label>Storyboard JSON (optional)</label>
+        <textarea id="storyboard" rows="10" placeholder='{"scenes":[{"duration_s":5,"prompt":"..."}]}'></textarea>
+
+        <label>Images (multiple)</label>
+        <input id="images" type="file" accept="image/*" multiple />
+
+        <div class="row">
+          <label>Backend</label>
+          <select id="backend">
+            <option value="auto" selected>auto (cloud → fallback local)</option>
+            <option value="local">local (guaranteed)</option>
+            <option value="cloud">cloud (requires API key)</option>
+          </select>
+        </div>
+
+        <div class="row">
+          <label>Provider</label>
+          <select id="provider">
+            <option value="kling" selected>kling (可灵)</option>
+            <option value="gemini">gemini</option>
+            <option value="doubao">doubao (豆包)</option>
+            <option value="openai">openai</option>
+          </select>
+        </div>
+
+        <div class="row">
+          <label><input id="subtitles" type="checkbox" checked /> Subtitles</label>
+        </div>
+
+        <div class="row">
+          <label>BGM (optional)</label>
+          <input id="bgm" type="file" accept="audio/*" />
+        </div>
+
+        <div class="row">
+          <label>BGM Volume</label>
+          <input id="bgm_volume" type="number" value="0.25" step="0.05" min="0" max="2" />
+        </div>
+
+        <button id="submit">Create video</button>
+
+        <pre id="log" class="log"></pre>
+      </section>
+
+      <section class="card">
+        <h2>Result</h2>
+        <video id="video" controls style="width: 100%; display: none;"></video>
+      </section>
+    </main>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>
