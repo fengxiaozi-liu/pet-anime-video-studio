@@ -26,6 +26,14 @@ class Storyboard(BaseModel):
     subtitles: bool = True
     bgm_volume: float = Field(0.25, ge=0.0, le=2.0)
 
+    # encoding knobs (local backend)
+    x264_preset: str = "medium"  # ultrafast/superfast/veryfast/faster/fast/medium/slow
+    x264_crf: int = Field(20, ge=16, le=30)
+    x264_tune: str = "stillimage"
+
+    # debugging
+    keep_tmp: bool = False
+
     scenes: list[Scene] = Field(default_factory=list)
 
     @staticmethod

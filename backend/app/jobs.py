@@ -2,14 +2,16 @@ from __future__ import annotations
 
 import json
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+import threading
 
 
 @dataclass
 class JobStore:
     path: Path
+    _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
     def _load(self) -> dict[str, Any]:
         if not self.path.exists():
@@ -33,35 +35,38 @@ class JobStore:
         bgm: str | None,
         output: str,
     ) -> None:
-        data = self._load()
-        if job_id in data:
-            raise ValueError("job exists")
-        now = int(time.time())
-        data[job_id] = {
-            "job_id": job_id,
-            "backend": backend,
-            "provider": provider,
-            "prompt": prompt,
-            "storyboard": storyboard,
-            "images": images,
-            "bgm": bgm,
-            "output": output,
-            "status": "queued",
-            "error": None,
-            "created_at": now,
-            "updated_at": now,
-        }
-        self._save(data)
+        with self._lock:
+            data = self._load()
+            if job_id in data:
+                raise ValueError("job exists")
+            now = int(time.time())
+            data[job_id] = {
+                "job_id": job_id,
+                "backend": backend,
+                "provider": provider,
+                "prompt": prompt,
+                "storyboard": storyboard,
+                "images": images,
+                "bgm": bgm,
+                "output": output,
+                "status": "queued",
+                "error": None,
+                "created_at": now,
+                "updated_at": now,
+            }
+            self._save(data)
 
     def get(self, job_id: str) -> dict[str, Any] | None:
-        return self._load().get(job_id)
+        with self._lock:
+            return self._load().get(job_id)
 
     def patch(self, job_id: str, **fields: Any) -> None:
-        data = self._load()
-        job = data.get(job_id)
-        if not job:
-            raise KeyError(job_id)
-        job.update(fields)
-        job["updated_at"] = int(time.time())
-        data[job_id] = job
-        self._save(data)
+        with self._lock:
+            data = self._load()
+            job = data.get(job_id)
+            if not job:
+                raise KeyError(job_id)
+            job.update(fields)
+            job["updated_at"] = int(time.time())
+            data[job_id] = job
+            self._save(data)

@@ -13,6 +13,16 @@ def _run(cmd: list[str]) -> None:
         raise RuntimeError(f"Command failed ({p.returncode}): {' '.join(map(shlex.quote, cmd))}\n{p.stdout}")
 
 
+def _escape_ffmpeg_path(p: Path) -> str:
+    # For ffmpeg filter args (e.g. subtitles=...), ':' is a separator.
+    # Escaping is conservative to avoid breaking common Linux paths.
+    s = str(p)
+    s = s.replace("\\", "\\\\")
+    s = s.replace(":", "\\:")
+    s = s.replace("'", "\\'")
+    return s
+
+
 def _sec_to_ts(sec: float) -> str:
     # SRT timestamp: HH:MM:SS,mmm
     if sec < 0:
@@ -69,7 +79,12 @@ def _finalize(
             subbed = tmp_dir / "subbed.mp4"
             # libass style
             force_style = "Fontsize=28,Outline=2,Shadow=0,Alignment=2,MarginV=30"
-            vf = f"subtitles={str(srt)}:force_style='{force_style}'"
+            vf = f"subtitles={_escape_ffmpeg_path(srt)}:force_style='{force_style}'"
+
+            preset = storyboard.get("x264_preset", "medium")
+            crf = str(storyboard.get("x264_crf", 20))
+            tune = storyboard.get("x264_tune", "stillimage")
+
             cmd = [
                 "ffmpeg",
                 "-y",
@@ -80,11 +95,15 @@ def _finalize(
                 "-c:v",
                 "libx264",
                 "-preset",
-                "slow",
+                str(preset),
                 "-crf",
-                "18",
+                crf,
+                "-tune",
+                str(tune),
                 "-pix_fmt",
                 "yuv420p",
+                "-movflags",
+                "+faststart",
                 "-an",
                 str(subbed),
             ]
@@ -112,6 +131,8 @@ def _finalize(
             f"volume={vol}",
             "-c:v",
             "copy",
+            "-movflags",
+            "+faststart",
             "-c:a",
             "aac",
             "-b:a",
@@ -173,6 +194,10 @@ def render_local(
             f"format=yuv420p"
         )
 
+        preset = storyboard.get("x264_preset", "medium")
+        crf = str(storyboard.get("x264_crf", 20))
+        tune = storyboard.get("x264_tune", "stillimage")
+
         cmd = [
             "ffmpeg",
             "-y",
@@ -189,9 +214,15 @@ def render_local(
             "-c:v",
             "libx264",
             "-preset",
-            "slow",
+            str(preset),
             "-crf",
-            "18",
+            crf,
+            "-tune",
+            str(tune),
+            "-pix_fmt",
+            "yuv420p",
+            "-movflags",
+            "+faststart",
             str(seg),
         ]
         _run(cmd)
@@ -211,6 +242,18 @@ def render_local(
             bgm_path=bgm_path,
             tmp_dir=tmp_dir,
         )
+
+        if not bool(storyboard.get("keep_tmp", False)):
+            try:
+                for p in sorted(tmp_dir.glob("**/*"), reverse=True):
+                    if p.is_file():
+                        p.unlink(missing_ok=True)
+                    elif p.is_dir():
+                        p.rmdir()
+                tmp_dir.rmdir()
+            except Exception:
+                pass
+
         return
 
     # Build xfade chain.
@@ -240,6 +283,10 @@ def render_local(
 
     filter_complex = ";".join(fg)
 
+    preset = storyboard.get("x264_preset", "medium")
+    crf = str(storyboard.get("x264_crf", 20))
+    tune = storyboard.get("x264_tune", "stillimage")
+
     cmd += [
         "-filter_complex",
         filter_complex,
@@ -248,11 +295,15 @@ def render_local(
         "-c:v",
         "libx264",
         "-preset",
-        "slow",
+        str(preset),
         "-crf",
-        "18",
+        crf,
+        "-tune",
+        str(tune),
         "-pix_fmt",
         "yuv420p",
+        "-movflags",
+        "+faststart",
         str(base_video),
     ]
 
@@ -265,3 +316,16 @@ def render_local(
         bgm_path=bgm_path,
         tmp_dir=tmp_dir,
     )
+
+    # cleanup tmp unless explicitly kept (helps avoid disk bloat)
+    if not bool(storyboard.get("keep_tmp", False)):
+        try:
+            for p in sorted(tmp_dir.glob("**/*"), reverse=True):
+                if p.is_file():
+                    p.unlink(missing_ok=True)
+                elif p.is_dir():
+                    p.rmdir()
+            tmp_dir.rmdir()
+        except Exception:
+            # best-effort cleanup only
+            pass
