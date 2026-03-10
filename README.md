@@ -29,17 +29,34 @@ It is engineered as a pipeline with **switchable backends**:
 
 ## Quickstart
 
+### Option A: install script (recommended)
+
+```bash
+cd pet-anime-video
+./scripts/install.sh
+
+# run
+source .venv/bin/activate
+uvicorn backend.app.main:app --reload --port 8000
+
+# open
+# http://localhost:8000
+```
+
+### Option B: manual install
+
 ```bash
 cd pet-anime-video
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r backend/requirements.txt
 
+# ffmpeg is required for local backend
+# Ubuntu/WSL: sudo apt-get update && sudo apt-get install -y ffmpeg
+# macOS: brew install ffmpeg
+
 # run
 uvicorn backend.app.main:app --reload --port 8000
-
-# open
-# http://localhost:8000
 ```
 
 ## API
