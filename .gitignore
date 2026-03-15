@@ -1,4 +1,16 @@
 .venv/
-.data/
 __pycache__/
 *.pyc
+.data/
+*.mp4
+*.png
+*.jpg
+*.jpeg
+*.webm
+*.zip
+*.tgz
+node_modules/
+dist/
+release/
+.env
+.env.*
