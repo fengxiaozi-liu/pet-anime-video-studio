@@ -1,16 +1,30 @@
 .venv/
 __pycache__/
 *.pyc
+
+# editor
+.vscode/
+
+# runtime artifacts / user data
 .data/
+uploads/
+outputs/
+output/
+
+# media outputs
 *.mp4
 *.png
 *.jpg
 *.jpeg
 *.webm
+
+# packages
 *.zip
 *.tgz
 node_modules/
 dist/
 release/
+
+# env
 .env
 .env.*
