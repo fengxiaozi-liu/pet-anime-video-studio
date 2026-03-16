@@ -80,13 +80,21 @@
             <div class="panel__desc muted">导入素材（当前：多图）</div>
           </div>
 
-          <div class="dropzone">
-            <div class="dropzone__hint">拖拽文件到这里（占位）</div>
-            <div class="muted" style="font-size:12px;">下一步会改成：视频/图片/BGM/字幕/文案</div>
+          <div class="dropzone" id="dropzone">
+            <div class="dropzone__hint">拖拽视频到这里，或用下面按钮选择文件</div>
+            <div class="muted" style="font-size:12px;">当前先支持：视频（mp4/mov/mkv/webm）。</div>
           </div>
 
-          <label>Images（multiple）</label>
-          <input id="images" type="file" accept="image/*" multiple />
+          <label>视频素材（可多选）</label>
+          <input id="videos" type="file" accept="video/*" multiple />
+
+          <div class="asset-list" id="asset_list"></div>
+
+          <details style="margin-top:10px;">
+            <summary class="muted" style="cursor:pointer;">图片输入（兼容旧流程，后续会合并进素材库）</summary>
+            <label>Images（multiple）</label>
+            <input id="images" type="file" accept="image/*" multiple />
+          </details>
         </section>
       </aside>
 

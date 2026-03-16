@@ -60,6 +60,13 @@ class JobStore:
         with self._lock:
             return self._load().get(job_id)
 
+    def list_recent(self, limit: int = 30) -> list[dict[str, Any]]:
+        with self._lock:
+            data = self._load()
+            items = list(data.values())
+            items.sort(key=lambda x: x.get("created_at", 0), reverse=True)
+            return items[:limit]
+
     def patch(self, job_id: str, **fields: Any) -> None:
         with self._lock:
             data = self._load()

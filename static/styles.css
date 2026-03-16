@@ -72,7 +72,16 @@ textarea, input, select{
   padding: 12px;
   margin-bottom: 10px;
 }
+.dropzone.dragover{ outline: 2px solid var(--primary); }
 .dropzone__hint{ font-size: 12px; color: var(--muted); }
+
+.asset-list{ display:flex; flex-direction:column; gap:8px; margin-top: 10px; }
+.asset-item{ display:flex; gap:10px; align-items:flex-start; justify-content:space-between; padding:10px; border-radius:12px; border:1px solid var(--border); background: rgba(11,18,32,.55); }
+.asset-item__meta{ min-width:0; }
+.asset-item__name{ font-size: 12px; font-weight: 700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width: 240px; }
+.asset-item__sub{ font-size: 12px; color: var(--muted); margin-top: 2px; }
+.asset-item__actions{ display:flex; gap:8px; }
+.asset-pill{ font-size: 11px; border: 1px solid #33507a; border-radius: 999px; padding: 2px 8px; color: #b9d6ff; }
 
 .output-actions{ display:flex; gap: 10px; flex-wrap: wrap; }
 

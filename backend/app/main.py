@@ -8,6 +8,8 @@ from typing import Any, Literal
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse
+
+from .assets import AssetStore
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
@@ -27,11 +29,17 @@ app.mount("/static", StaticFiles(directory=str(ROOT / "static")), name="static")
 
 templates = Jinja2Templates(directory=str(ROOT / "templates"))
 store = JobStore(DATA_DIR / "jobs.json")
+assets = AssetStore(root_dir=UPLOAD_DIR / "assets", index_path=DATA_DIR / "assets.json")
 
 
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
+
+
+@app.get("/api/jobs")
+def list_jobs(limit: int = 20) -> dict[str, Any]:
+    return {"jobs": store.list_recent(limit=limit)}
 
 
 @app.post("/api/jobs")
@@ -104,6 +112,38 @@ def get_job(job_id: str) -> dict[str, Any]:
     if not job:
         raise HTTPException(status_code=404, detail="job not found")
     return job
+
+
+@app.get("/api/assets")
+def list_assets(limit: int = 50) -> dict[str, Any]:
+    return {"assets": assets.list_recent(limit=limit)}
+
+
+@app.post("/api/assets")
+async def upload_asset(
+    kind: str = Form("video"),
+    file: UploadFile = File(...),
+) -> dict[str, Any]:
+    # kind is reserved for future expansion: video/image/audio/subtitles
+    suffix = Path(file.filename or "file").suffix
+    if kind == "video":
+        if suffix.lower() not in {".mp4", ".mov", ".mkv", ".webm"}:
+            raise HTTPException(status_code=400, detail="unsupported video format")
+    content = await file.read()
+    meta = assets.add(kind=kind, filename=file.filename or "file", suffix=suffix or ".bin", bytes_data=content)
+    return {"asset": meta}
+
+
+@app.get("/api/assets/{asset_id}")
+def download_asset(asset_id: str):
+    meta = assets.get(asset_id)
+    if not meta:
+        raise HTTPException(status_code=404, detail="asset not found")
+    p = Path(meta["path"])
+    if not p.exists():
+        raise HTTPException(status_code=404, detail="asset missing")
+    # Let browser download/play
+    return FileResponse(path=str(p), filename=meta.get("filename") or p.name)
 
 
 @app.get("/api/jobs/{job_id}/result")
