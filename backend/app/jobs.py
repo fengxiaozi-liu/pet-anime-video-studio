@@ -34,6 +34,7 @@ class JobStore:
         images: list[str],
         bgm: str | None,
         output: str,
+        **extra_fields: Any,
     ) -> None:
         with self._lock:
             data = self._load()
@@ -50,9 +51,15 @@ class JobStore:
                 "bgm": bgm,
                 "output": output,
                 "status": "queued",
+                "stage": "queued",
+                "status_text": "任务已创建，等待开始",
+                "effective_backend": None,
+                "effective_provider": None,
+                "fallback_reason": None,
                 "error": None,
                 "created_at": now,
                 "updated_at": now,
+                **extra_fields,
             }
             self._save(data)
 

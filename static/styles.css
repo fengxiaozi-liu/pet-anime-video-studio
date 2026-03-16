@@ -47,7 +47,7 @@ body{
 }
 .btn-primary:hover{ transform: translateY(-1px); }
 .btn{ background: #fff; color: var(--text); border: 1px solid var(--border); padding: 9px 12px; border-radius: 12px; }
-.btn:disabled{ opacity:.5; cursor:not-allowed; }
+.btn:disabled, .btn.is-disabled, .btn[aria-disabled="true"]{ opacity:.5; cursor:not-allowed; pointer-events:none; }
 
 .workspace--v2{
   display:grid;
@@ -122,6 +122,7 @@ textarea:focus, input:focus, select:focus{ outline: 2px solid rgba(124,108,255,.
 .queue-block, .advanced-block{ min-height:0; display:flex; flex-direction:column; }
 .queue__head, .preview__head{ font-size: 16px; font-weight: 800; margin-bottom: 10px; }
 .job-hint{ margin-bottom: 10px; padding: 10px 12px; background:#fff7ef; border:1px dashed #f1ccb5; border-radius: 12px; font-size: 12px; }
+.job-meta{ min-height: 18px; margin: -2px 0 10px; font-size: 12px; line-height: 1.5; }
 .job-list{ display:flex; flex-direction:column; gap: 8px; margin-bottom: 12px; max-height: 185px; overflow:auto; }
 .job-item{ border: 1px solid #f0ddd0; background: #fffaf6; border-radius: 14px; padding: 12px; cursor: pointer; }
 .job-item:hover{ border-color: #ebb593; }
@@ -133,6 +134,7 @@ textarea:focus, input:focus, select:focus{ outline: 2px solid rgba(124,108,255,.
 .job-item__status--running{ border-color:#c7bafc; color:#5d4be0; background:#f5f2ff; }
 .job-item__status--done{ border-color:#bde7cf; color:#12794a; background:#effbf4; }
 .job-item__status--error{ border-color:#f4b7b7; color:#c33c3c; background:#fff1f1; }
+.job-item__stage{ margin-top: 8px; font-size: 11px; color: var(--accent); font-weight: 700; }
 .job-item__prompt{ margin-top: 8px; font-size: 12px; color: #6f5d50; line-height: 1.5; white-space: nowrap; overflow:hidden; text-overflow: ellipsis; }
 .log{ background: #fffaf7; border: 1px solid #f0ddd0; border-radius: 14px; padding: 12px; height: 100%; min-height: 120px; overflow:auto; font-size: 12px; color: #6b584b; }
 .advanced-note{ margin-top: 12px; font-size: 12px; line-height: 1.5; }

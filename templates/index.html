@@ -94,6 +94,7 @@
             <div class="queue-block">
               <div class="queue__head">任务队列</div>
               <div id="job_hint" class="job-hint muted">还没有任务。上传图片后点击“生成视频”。</div>
+              <div id="job_meta" class="job-meta muted"></div>
               <div id="job_list" class="job-list">
                 <div class="muted" style="font-size:12px;">暂无任务（点击右上角“生成视频”）</div>
               </div>
@@ -139,7 +140,7 @@
                   </div>
                 </div>
 
-                <div class="advanced-note muted">如果只是先看效果，保持默认就行。现在主要走本地轻量渲染链路。</div>
+                <div class="advanced-note muted" id="advanced_note">如果只是先看效果，保持默认就行。auto 会优先尝试云端，失败时自动回退到本地轻量渲染链路。</div>
               </div>
             </div>
           </div>
@@ -152,7 +153,7 @@
               <div class="panel__desc muted">生成完成后会自动显示。首次本地渲染可能需要几十秒到 2 分钟。</div>
             </div>
             <div class="output-actions">
-              <button class="btn" disabled>导出 MP4</button>
+              <a id="download_mp4" class="btn is-disabled" href="#" aria-disabled="true">导出 MP4</a>
               <button class="btn" disabled>导出封面</button>
             </div>
           </div>
