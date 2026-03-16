@@ -1,70 +1,135 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Pet Anime Video</title>
+    <title>PetClip Studio</title>
     <link rel="stylesheet" href="/static/styles.css" />
   </head>
   <body>
-    <main class="container">
-      <h1>Pet Anime Video (MVP)</h1>
-      <p class="muted">Upload images + prompt (+ optional storyboard) → 15s 720p MP4. Cloud providers are pluggable; local backend always works.</p>
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand__title">PetClip Studio</div>
+        <div class="brand__sub muted">工作台（MVP）：左上配置 / 左下素材 / 右侧输出</div>
+      </div>
+      <div class="topbar__actions">
+        <button id="submit" class="btn-primary">生成视频</button>
+      </div>
+    </header>
 
-      <section class="card">
-        <label>Prompt</label>
-        <textarea id="prompt" rows="3" placeholder="A cozy hand-drawn anime scene...">A cozy hand-drawn anime scene with a small pet hero, watercolor backgrounds, gentle lighting.</textarea>
+    <main class="workspace">
+      <aside class="sidebar">
+        <section class="panel panel--config">
+          <div class="panel__head">
+            <div class="panel__title">配置</div>
+            <div class="panel__desc muted">平台模板 / 模型 / 参数</div>
+          </div>
 
-        <label>Storyboard JSON (optional)</label>
-        <textarea id="storyboard" rows="10" placeholder='{"scenes":[{"duration_s":5,"prompt":"..."}]}'></textarea>
-
-        <label>Images (multiple)</label>
-        <input id="images" type="file" accept="image/*" multiple />
-
-        <div class="row">
-          <label>Backend</label>
-          <select id="backend">
-            <option value="auto" selected>auto (cloud → fallback local)</option>
-            <option value="local">local (guaranteed)</option>
-            <option value="cloud">cloud (requires API key)</option>
+          <label>平台（占位）</label>
+          <select id="platform" disabled>
+            <option selected>抖音（9:16）</option>
+            <option>小红书（9:16）</option>
+            <option>视频号</option>
+            <option>B站</option>
           </select>
-        </div>
 
-        <div class="row">
-          <label>Provider</label>
-          <select id="provider">
-            <option value="kling" selected>kling (可灵)</option>
-            <option value="gemini">gemini</option>
-            <option value="doubao">doubao (豆包)</option>
-            <option value="openai">openai</option>
-          </select>
-        </div>
+          <label>Prompt</label>
+          <textarea id="prompt" rows="3" placeholder="描述风格/剧情...">A cozy hand-drawn anime scene with a small pet hero, watercolor backgrounds, gentle lighting.</textarea>
 
-        <div class="row">
-          <label><input id="subtitles" type="checkbox" checked /> Subtitles</label>
-        </div>
+          <label>Storyboard JSON（可选）</label>
+          <textarea id="storyboard" rows="6" placeholder='{"scenes":[{"duration_s":5,"prompt":"..."}]}'></textarea>
 
-        <div class="row">
-          <label>BGM (optional)</label>
+          <div class="grid2">
+            <div>
+              <label>Backend</label>
+              <select id="backend">
+                <option value="auto" selected>auto（云优先→本地兜底）</option>
+                <option value="local">local（本地）</option>
+                <option value="cloud">cloud（云）</option>
+              </select>
+            </div>
+            <div>
+              <label>Provider</label>
+              <select id="provider">
+                <option value="kling" selected>kling（可灵）</option>
+                <option value="gemini">gemini</option>
+                <option value="doubao">doubao（豆包）</option>
+                <option value="openai">openai</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="grid2">
+            <label class="checkbox">
+              <input id="subtitles" type="checkbox" checked />
+              <span>字幕</span>
+            </label>
+            <div>
+              <label>BGM Volume</label>
+              <input id="bgm_volume" type="number" value="0.25" step="0.05" min="0" max="2" />
+            </div>
+          </div>
+
+          <label>BGM（可选）</label>
           <input id="bgm" type="file" accept="audio/*" />
+        </section>
+
+        <section class="panel panel--assets">
+          <div class="panel__head">
+            <div class="panel__title">素材库</div>
+            <div class="panel__desc muted">导入素材（当前：多图）</div>
+          </div>
+
+          <div class="dropzone">
+            <div class="dropzone__hint">拖拽文件到这里（占位）</div>
+            <div class="muted" style="font-size:12px;">下一步会改成：视频/图片/BGM/字幕/文案</div>
+          </div>
+
+          <label>Images（multiple）</label>
+          <input id="images" type="file" accept="image/*" multiple />
+        </section>
+      </aside>
+
+      <section class="main">
+        <div class="panel panel--output">
+          <div class="panel__head">
+            <div>
+              <div class="panel__title">输出区</div>
+              <div class="panel__desc muted">队列 / 预览 / 导出（占位）</div>
+            </div>
+            <div class="output-actions">
+              <button class="btn" disabled>导出 MP4</button>
+              <button class="btn" disabled>导出封面</button>
+              <button class="btn" disabled>导出素材包</button>
+            </div>
+          </div>
+
+          <div class="output-grid">
+            <div class="queue">
+              <div class="queue__head">任务队列</div>
+              <div class="queue__item muted">暂无任务（点击右上角“生成视频”）</div>
+              <pre id="log" class="log"></pre>
+            </div>
+
+            <div class="preview">
+              <div class="preview__head">预览</div>
+              <video id="video" controls style="width: 100%; display: none;"></video>
+              <div id="preview_placeholder" class="preview__placeholder muted">生成完成后将自动显示预览</div>
+            </div>
+          </div>
         </div>
-
-        <div class="row">
-          <label>BGM Volume</label>
-          <input id="bgm_volume" type="number" value="0.25" step="0.05" min="0" max="2" />
-        </div>
-
-        <button id="submit">Create video</button>
-
-        <pre id="log" class="log"></pre>
-      </section>
-
-      <section class="card">
-        <h2>Result</h2>
-        <video id="video" controls style="width: 100%; display: none;"></video>
       </section>
     </main>
 
     <script src="/static/app.js"></script>
+    <script>
+      // Hide placeholder when video becomes visible
+      const vid = document.getElementById('video');
+      const ph = document.getElementById('preview_placeholder');
+      const obs = new MutationObserver(() => {
+        if (vid.style.display !== 'none') ph.style.display = 'none';
+      });
+      obs.observe(vid, { attributes: true, attributeFilter: ['style'] });
+    </script>
   </body>
 </html>
