@@ -10,6 +10,8 @@ __pycache__/
 uploads/
 outputs/
 output/
+tmp_test_outputs/
+tmp_test_inputs/
 
 # media outputs
 *.mp4
