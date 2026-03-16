@@ -90,6 +90,19 @@ textarea, input, select{
 .queue__head, .preview__head{ font-weight: 800; margin-bottom: 10px; }
 .queue__item{ font-size: 12px; margin-bottom: 10px; }
 
+.job-list{ display:flex; flex-direction:column; gap: 8px; margin-bottom: 10px; }
+.job-item{ border: 1px solid #1b2a3d; background: #070b12; border-radius: 12px; padding: 10px; cursor: pointer; }
+.job-item:hover{ border-color: #33507a; }
+.job-item--active{ border-color: var(--primary); box-shadow: 0 0 0 1px rgba(47,129,247,.35) inset; }
+.job-item__top{ display:flex; justify-content:space-between; gap: 10px; align-items:center; }
+.job-item__id{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 11px; color: #9db0c6; }
+.job-item__status{ font-size: 11px; padding: 2px 8px; border: 1px solid #223046; border-radius: 999px; color: #cfe3ff; }
+.job-item__status--queued{ opacity:.8; }
+.job-item__status--running{ border-color:#9a6bff; color:#d8c6ff; }
+.job-item__status--done{ border-color:#1fa971; color:#a7f3d0; }
+.job-item__status--error{ border-color:#ef4444; color:#fecaca; }
+.job-item__prompt{ margin-top: 6px; font-size: 12px; color: #cfe3ff; opacity:.9; white-space: nowrap; overflow:hidden; text-overflow: ellipsis; }
+
 .log{ background: #070b12; border: 1px solid #1b2a3d; border-radius: 12px; padding: 10px; height: 210px; overflow:auto; font-size: 12px; color: #cfe3ff; }
 
 .preview__placeholder{ margin-top: 12px; padding: 12px; border: 1px dashed #33507a; border-radius: 12px; }

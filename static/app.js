@@ -10,14 +10,69 @@ async function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-async function poll(jobId) {
+async function poll(jobId, onUpdate) {
   while (true) {
     const res = await fetch(`/api/jobs/${jobId}`);
     const job = await res.json();
+    if (onUpdate) onUpdate(job);
     log(`status: ${job.status}`);
     if (job.status === "done") return job;
     if (job.status === "error") throw new Error(job.error || "job failed");
     await sleep(1000);
+  }
+}
+
+async function fetchJobs(limit = 20) {
+  const res = await fetch(`/api/jobs?limit=${limit}`, { cache: 'no-store' });
+  const data = await res.json();
+  return (data && data.jobs) || [];
+}
+
+let activeJobId = null;
+
+function renderJobs(jobs) {
+  const list = $('job_list');
+  if (!list) return;
+  list.innerHTML = '';
+  if (!jobs || jobs.length === 0) {
+    list.innerHTML = '<div class="muted" style="font-size:12px;">暂无任务（点击右上角“生成视频”）</div>';
+    return;
+  }
+  for (const j of jobs) {
+    const el = document.createElement('div');
+    const active = activeJobId && j.job_id === activeJobId;
+    el.className = `job-item${active ? ' job-item--active' : ''}`;
+    const st = j.status || 'unknown';
+    el.innerHTML = `
+      <div class="job-item__top">
+        <div class="job-item__id">${j.job_id}</div>
+        <div class="job-item__status job-item__status--${st}">${st}</div>
+      </div>
+      <div class="job-item__prompt">${(j.prompt || '').slice(0, 80) || '(no prompt)'}</div>
+    `;
+    el.addEventListener('click', () => {
+      selectJob(j.job_id);
+    });
+    list.appendChild(el);
+  }
+}
+
+async function refreshJobs() {
+  const jobs = await fetchJobs(20);
+  renderJobs(jobs);
+  return jobs;
+}
+
+async function selectJob(jobId) {
+  activeJobId = jobId;
+  await refreshJobs();
+  const job = await (await fetch(`/api/jobs/${jobId}`, { cache: 'no-store' })).json();
+  if (job.status === 'done') {
+    const url = `/api/jobs/${jobId}/result`;
+    const vid = $('video');
+    vid.src = url;
+    vid.style.display = 'block';
+    vid.load();
   }
 }
 
@@ -117,6 +172,7 @@ if (videosInput) {
 
 setupDropzone();
 refreshAssets();
+refreshJobs();
 
 $("submit").addEventListener("click", async () => {
   try {
@@ -154,14 +210,20 @@ $("submit").addEventListener("click", async () => {
     const { job_id } = await res.json();
     log(`job_id: ${job_id}`);
 
-    log("rendering...");
-    await poll(job_id);
+    // refresh queue UI
+    activeJobId = job_id;
+    await refreshJobs();
 
-    const url = `/api/jobs/${job_id}/result`;
-    const vid = $("video");
-    vid.src = url;
-    vid.style.display = "block";
-    vid.load();
+    log("rendering...");
+    await poll(job_id, async (job) => {
+      // keep queue updated while running
+      if (job && job.job_id) {
+        activeJobId = job.job_id;
+        await refreshJobs();
+      }
+    });
+
+    await selectJob(job_id);
     log("done");
   } catch (e) {
     console.error(e);
