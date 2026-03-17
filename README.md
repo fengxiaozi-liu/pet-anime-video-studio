@@ -17,7 +17,8 @@ It is engineered as a pipeline with **switchable backends**:
 
 - Upload **multiple images** (character/reference frames)
 - Optional **storyboard JSON** (scenes + durations + per-scene prompts)
-- Generates **720p MP4** (H.264) with crossfades and subtle motion
+- Built-in **platform templates** for 抖音 / 小红书 vertical shorts
+- Generates **MP4** (H.264) with crossfades and subtle motion
 - Optional **BGM** + **burned-in subtitles** (SRT)
 - Simple web UI + REST API
 
@@ -70,6 +71,7 @@ Form fields:
 - `storyboard_json` (string; optional)
 - `backend` (string: `auto` | `local` | `cloud`; default `auto`)
 - `provider` (string: `kling` | `gemini` | `doubao` | `openai`; default `kling`)
+- `template_id` (string; optional, e.g. `douyin-15`, `xiaohongshu-35`)
 - `subtitles` (bool; default `true`)
 - `bgm_volume` (float; default `0.25`)
 - `bgm` (file; optional)
@@ -80,6 +82,10 @@ Response: `{ "job_id": "..." }`
 ### Get job
 
 `GET /api/jobs/{job_id}`
+
+### List platform templates
+
+`GET /api/platform-templates`
 
 ### Download result
 

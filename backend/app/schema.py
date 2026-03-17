@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Literal
-
 from pydantic import BaseModel, Field
 
 
@@ -12,6 +10,13 @@ class Scene(BaseModel):
 
 
 class Storyboard(BaseModel):
+    template_id: str | None = None
+    template_name: str | None = None
+    platform: str | None = None
+    cover_width: int | None = None
+    cover_height: int | None = None
+    subtitle_safe_margin: int | None = None
+
     fps: int = Field(30, ge=12, le=60)
     width: int = Field(1280, ge=320, le=3840)
     height: int = Field(720, ge=240, le=2160)
@@ -37,9 +42,8 @@ class Storyboard(BaseModel):
     scenes: list[Scene] = Field(default_factory=list)
 
     @staticmethod
-    def autogen(prompt: str) -> "Storyboard":
-        # simple: 3 scenes, equal split
-        dur = 15.0
+    def autogen(prompt: str, duration_s: float = 15.0) -> "Storyboard":
+        dur = float(duration_s or 15.0)
         per = dur / 3
         p = (prompt or "").strip()
         scenes = [
@@ -50,7 +54,25 @@ class Storyboard(BaseModel):
         return Storyboard(duration_s=dur, scenes=scenes)
 
     def with_defaults(self, prompt: str) -> "Storyboard":
-        # ensure scenes exist and total duration approx matches
         if not self.scenes:
-            return Storyboard.autogen(prompt=prompt)
+            return Storyboard.autogen(prompt=prompt, duration_s=self.duration_s)
+        total = sum(float(scene.duration_s) for scene in self.scenes)
+        if total > 0:
+            return self.model_copy(update={"duration_s": total})
         return self
+
+    def apply_template(self, template: dict | None) -> "Storyboard":
+        if not template:
+            return self
+        updates = {
+            "template_id": template.get("id"),
+            "template_name": template.get("name"),
+            "platform": template.get("platform"),
+            "width": int(template.get("width", self.width)),
+            "height": int(template.get("height", self.height)),
+            "duration_s": float(template.get("duration_s", self.duration_s)),
+            "cover_width": int(template.get("cover_width", self.width)),
+            "cover_height": int(template.get("cover_height", self.height)),
+            "subtitle_safe_margin": int(template.get("subtitle_safe_margin", 180)),
+        }
+        return self.model_copy(update=updates)

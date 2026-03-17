@@ -137,6 +137,7 @@ textarea:focus, input:focus, select:focus{ outline: 2px solid rgba(124,108,255,.
 .job-item__stage{ margin-top: 8px; font-size: 11px; color: var(--accent); font-weight: 700; }
 .job-item__prompt{ margin-top: 8px; font-size: 12px; color: #6f5d50; line-height: 1.5; white-space: nowrap; overflow:hidden; text-overflow: ellipsis; }
 .log{ background: #fffaf7; border: 1px solid #f0ddd0; border-radius: 14px; padding: 12px; height: 100%; min-height: 120px; overflow:auto; font-size: 12px; color: #6b584b; }
+.template-summary{ margin-top: 12px; padding: 10px 12px; border-radius: 12px; background:#fff7ef; border:1px solid #f1ccb5; font-size: 12px; line-height: 1.6; color:#6f5d50; }
 .advanced-note{ margin-top: 12px; font-size: 12px; line-height: 1.5; }
 
 .output-actions{ display:flex; gap: 10px; flex-wrap: wrap; }

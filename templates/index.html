@@ -130,14 +130,13 @@
                     <input id="bgm_volume" type="number" value="0.25" step="0.05" min="0" max="2" />
                   </div>
                   <div>
-                    <label>平台（占位）</label>
-                    <select id="platform" disabled>
-                      <option selected>抖音（9:16）</option>
-                      <option>小红书（9:16）</option>
-                      <option>视频号</option>
-                      <option>B站</option>
-                    </select>
+                    <label>平台模板</label>
+                    <select id="template_id"></select>
                   </div>
+                </div>
+
+                <div class="template-summary" id="template_summary">
+                  正在加载平台模板...
                 </div>
 
                 <div class="advanced-note muted" id="advanced_note">如果只是先看效果，保持默认就行。auto 会优先尝试云端，失败时自动回退到本地轻量渲染链路。</div>
