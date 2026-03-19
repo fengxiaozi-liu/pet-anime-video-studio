@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  pet-anime-video:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: pet-anime-video
+    restart: unless-stopped
+    
+    ports:
+      - "8000:8000"
+    
+    volumes:
+      # Persist uploads directory
+      - ./backend/uploads:/app/uploads
+      # Persist outputs directory
+      - ./backend/outputs:/app/outputs
+      # Persist data (jobs.json, assets.json)
+      - ./backend/data:/app/data
+      # Optional: mount .env file for easy configuration
+      - ./backend/.env:/app/.env:ro
+    
+    environment:
+      # API Keys (override with your own values or use a .env file)
+      - KLING_API_KEY=${KLING_API_KEY:-}
+      - XINGHUN_API_KEY=${XINGHUN_API_KEY:-}
+      
+      # Server Configuration
+      - HOST=0.0.0.0
+      - PORT=8000
+      - DEBUG=${DEBUG:-false}
+      
+      # Directory Configuration
+      - UPLOAD_DIR=/app/uploads
+      - OUTPUT_DIR=/app/outputs
+      - DATA_DIR=/app/data
+      
+      # Python Environment
+      - PYTHONUNBUFFERED=1
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    
+    networks:
+      - pet-anime-network
+
+networks:
+  pet-anime-network:
+    driver: bridge

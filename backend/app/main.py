@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import logging
 import uuid
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Literal
 
@@ -11,20 +13,49 @@ from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
 
 from .assets import AssetStore
+from .config import get_settings
 from .jobs import JobStore
 from .pipeline import run_job
 from .platform_templates import get_platform_template, list_platform_templates
+from .providers.cloud_dispatch import _PROVIDERS
 from .schema import Storyboard
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 ALLOWED_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 ALLOWED_BGM_SUFFIXES = {".mp3", ".wav", ".m4a", ".aac", ".ogg"}
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: Log provider configuration status
+    settings = get_settings()
+    logger.info("=== Starting Pet Anime Video Backend ===")
+    logger.info(f"DEBUG: {settings.DEBUG}")
+    logger.info(f"UPLOAD_DIR: {settings.UPLOAD_DIR}")
+    logger.info(f"OUTPUT_DIR: {settings.OUTPUT_DIR}")
+
+    configured_providers = []
+    for name, provider in _PROVIDERS.items():
+        if provider.is_configured():
+            configured_providers.append(name)
+
+    if configured_providers:
+        logger.info(f"Configured Cloud Providers: {', '.join(configured_providers)}")
+    else:
+        logger.warning("No cloud providers are configured (API keys missing). Use backend=local/auto.")
+    logger.info("=========================================")
+    yield
+    # Shutdown logic if needed
+
 ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = ROOT / ".data"
-UPLOAD_DIR = DATA_DIR / "uploads"
-OUTPUT_DIR = DATA_DIR / "outputs"
+settings = get_settings()
+UPLOAD_DIR = settings.UPLOAD_DIR
+OUTPUT_DIR = settings.OUTPUT_DIR
 
-app = FastAPI(title="Pet Anime Video", version="0.1.0")
+app = FastAPI(title="Pet Anime Video", version="0.1.0", lifespan=lifespan)
 
 app.mount("/static", StaticFiles(directory=str(ROOT / "static")), name="static")
 
@@ -36,6 +67,12 @@ assets = AssetStore(root_dir=UPLOAD_DIR / "assets", index_path=DATA_DIR / "asset
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
+
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint for container orchestration."""
+    return {"status": "healthy", "service": "pet-anime-video"}
 
 
 @app.get("/api/jobs")
