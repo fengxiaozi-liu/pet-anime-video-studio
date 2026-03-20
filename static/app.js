@@ -1,5 +1,28 @@
 const $ = (id) => document.getElementById(id);
 
+// Error tracking for debugging
+let errorHistory = [];
+
+function logError(context, details = {}) {
+  const entry = {
+    timestamp: new Date().toISOString(),
+    context,
+    ...details
+  };
+  errorHistory.push(entry);
+  console.error(`[ERROR] ${context}:`, details);
+}
+
+function showErrorMessage(userMessage, technicalDetails = null) {
+  // Show user-friendly message
+  alert(userMessage);
+  
+  // Log technical details for debugging
+  if (technicalDetails) {
+    logError('User-facing error', { message: userMessage, details: technicalDetails });
+  }
+}
+
 function log(msg) {
   const el = $("log");
   el.textContent += msg + "\n";
@@ -250,9 +273,11 @@ function setupDropzone() {
       await uploadVideoFiles(vids);
       log('upload done');
     } catch (err) {
-      console.error(err);
-      log('ERROR: ' + (err && err.message ? err.message : String(err)));
-      alert('上传失败：' + (err && err.message ? err.message : String(err)));
+      const errorMsg = err && err.message ? err.message : String(err);
+      console.error('Upload error:', err);
+      logError('Video upload failed', { filename: vids[0].name, error: errorMsg });
+      log('ERROR: ' + errorMsg);
+      showErrorMessage(`上传失败：${errorMsg}`, err);
     }
   });
 }
@@ -315,9 +340,11 @@ if (videosInput) {
       await uploadVideoFiles(Array.from(files));
       log('upload done');
     } catch (err) {
-      console.error(err);
-      log('ERROR: ' + (err && err.message ? err.message : String(err)));
-      alert('上传失败：' + (err && err.message ? err.message : String(err)));
+      const errorMsg = err && err.message ? err.message : String(err);
+      console.error('Upload error:', err);
+      logError('File input upload failed', { count: files.length, error: errorMsg });
+      log('ERROR: ' + errorMsg);
+      showErrorMessage(`上传失败：${errorMsg}`, err);
     } finally {
       videosInput.value = '';
     }
@@ -330,10 +357,13 @@ refreshAssets();
 refreshJobs();
 setGlobalStatus("空闲中", "idle");
 initPlatformTemplates().catch((err) => {
-  console.error(err);
+  const errorMsg = err && err.message ? err.message : String(err);
+  console.error('Template init error:', err);
+  logError('Platform templates failed to load', { error: errorMsg });
   const summary = $('template_summary');
   if (summary) summary.textContent = '平台模板加载失败，请刷新页面重试。';
-  log('ERROR: ' + (err && err.message ? err.message : String(err)));
+  log('ERROR: 平台模板加载失败 - ' + errorMsg);
+  showErrorMessage('平台模板加载失败，请刷新页面后重试', err);
 });
 syncBackendUI();
 
