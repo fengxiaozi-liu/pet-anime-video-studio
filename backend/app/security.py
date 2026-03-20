@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from fastapi import Depends, HTTPException, Request, status
-from fastapi.security import HTTPBasicCredentials, HTTPBasicSecurity
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
 logger = logging.getLogger(__name__)
 
@@ -151,7 +151,7 @@ class SecurityManager:
 
 # Global dependency function
 async def get_current_user(
-    credentials: HTTPBasicCredentials = Depends(HTTPBasicSecurity(auto_error=False)),
+    credentials: HTTPBasicCredentials = Depends(HTTPBasic(auto_error=False)),
     request: Request = None,
 ) -> str | None:
     """Dependency to get the current authenticated user.
