@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import logging
+import os
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Literal
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -19,6 +21,7 @@ from .pipeline import run_job
 from .platform_templates import get_platform_template, list_platform_templates
 from .providers.cloud_dispatch import _PROVIDERS
 from .schema import Storyboard
+from .security import SecurityManager
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -27,14 +30,66 @@ logger = logging.getLogger(__name__)
 ALLOWED_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 ALLOWED_BGM_SUFFIXES = {".mp3", ".wav", ".m4a", ".aac", ".ogg"}
 
+# Global security manager instance
+security_manager: SecurityManager | None = None
+security = HTTPBasic()
+
+
+async def verify_api_credentials(credentials: HTTPBasicCredentials = Depends(security)):
+    """Verify HTTP Basic Auth credentials."""
+    if security_manager is None or not security_manager.enabled:
+        return credentials.username
+    
+    # Validate credentials against configured values
+    api_username = os.getenv("API_KEY_USERNAME", "admin")
+    api_password = os.getenv("API_KEY_PASSWORD", "changeme123")
+    
+    if credentials.username != api_username or credentials.password != api_password:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    
+    return credentials.username
+
+
+async def authenticated_endpoint(user: str = Depends(verify_api_credentials)):
+    """Dependency for authenticated endpoints with rate limiting."""
+    if security_manager and security_manager.enabled:
+        user_id = f"auth:{user}"
+        if not await security_manager.check_rate_limit(user_id):
+            raise HTTPException(
+                status_code=429,
+                detail="Rate limit exceeded. Try again later."
+            )
+    return user
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: Log provider configuration status
+    # Startup: Log provider configuration status and initialize security
+    global security_manager
     settings = get_settings()
     logger.info("=== Starting Pet Anime Video Backend ===")
     logger.info(f"DEBUG: {settings.DEBUG}")
     logger.info(f"UPLOAD_DIR: {settings.UPLOAD_DIR}")
     logger.info(f"OUTPUT_DIR: {settings.OUTPUT_DIR}")
+
+    # Initialize security manager
+    security_enabled = os.getenv("SECURITY_ENABLED", "true").lower() == "true"
+    if security_enabled:
+        try:
+            api_username = os.getenv("API_KEY_USERNAME", "admin")
+            api_password = os.getenv("API_KEY_PASSWORD", "changeme123")
+            security_manager = SecurityManager(
+                enabled=True,
+                max_requests_per_minute=10,
+                max_requests_per_hour=100,
+                credentials=None  # Will validate via HTTPBasic
+            )
+            logger.info("Security manager initialized with rate limiting (10 req/min, 100 req/hour)")
+        except Exception as e:
+            logger.warning(f"Failed to initialize security: {e}. Running without auth.")
+            security_manager = SecurityManager(enabled=False)
+    else:
+        security_manager = SecurityManager(enabled=False)
+        logger.info("Security disabled (SECURITY_ENABLED=false)")
 
     configured_providers = []
     for name, provider in _PROVIDERS.items():
@@ -76,18 +131,19 @@ async def health_check():
 
 
 @app.get("/api/jobs")
-def list_jobs(limit: int = 20) -> dict[str, Any]:
+def list_jobs(limit: int = 20, _user: str = Depends(authenticated_endpoint)) -> dict[str, Any]:
     return {"jobs": store.list_recent(limit=limit)}
 
 
 @app.get("/api/platform-templates")
-def get_platform_templates() -> dict[str, Any]:
+def get_platform_templates(_user: str = Depends(authenticated_endpoint)) -> dict[str, Any]:
     templates = list_platform_templates()
     return {"templates": templates}
 
 
 @app.post("/api/jobs")
 async def create_job(
+    _user: str = Depends(authenticated_endpoint),
     prompt: str = Form(""),
     storyboard_json: str | None = Form(None),
     backend: Literal["auto", "local", "cloud"] = Form("auto"),
@@ -171,7 +227,7 @@ async def create_job(
 
 
 @app.get("/api/jobs/{job_id}")
-def get_job(job_id: str) -> dict[str, Any]:
+def get_job(job_id: str, _user: str = Depends(authenticated_endpoint)) -> dict[str, Any]:
     job = store.get(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="job not found")
@@ -179,12 +235,13 @@ def get_job(job_id: str) -> dict[str, Any]:
 
 
 @app.get("/api/assets")
-def list_assets(limit: int = 50) -> dict[str, Any]:
+def list_assets(limit: int = 50, _user: str = Depends(authenticated_endpoint)) -> dict[str, Any]:
     return {"assets": assets.list_recent(limit=limit)}
 
 
 @app.post("/api/assets")
 async def upload_asset(
+    _user: str = Depends(authenticated_endpoint),
     kind: str = Form("video"),
     file: UploadFile = File(...),
 ) -> dict[str, Any]:
@@ -199,7 +256,7 @@ async def upload_asset(
 
 
 @app.get("/api/assets/{asset_id}")
-def download_asset(asset_id: str):
+def download_asset(asset_id: str, _user: str = Depends(authenticated_endpoint)):
     meta = assets.get(asset_id)
     if not meta:
         raise HTTPException(status_code=404, detail="asset not found")
@@ -210,7 +267,7 @@ def download_asset(asset_id: str):
 
 
 @app.get("/api/jobs/{job_id}/result")
-def download_result(job_id: str):
+def download_result(job_id: str, _user: str = Depends(authenticated_endpoint)):
     job = store.get(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="job not found")

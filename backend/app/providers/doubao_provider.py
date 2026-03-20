@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
-
+from ..config import get_settings
 from .base import RenderContext
 
 
@@ -11,8 +10,8 @@ class DoubaoProvider:
     name: str = "doubao"
 
     def is_configured(self) -> bool:
-        # Common patterns: DOUBAO_API_KEY or VOLCENGINE_API_KEY
-        return bool(os.getenv("DOUBAO_API_KEY") or os.getenv("VOLCENGINE_API_KEY"))
+        settings = get_settings()
+        return bool(settings.DOUBAO_API_KEY or settings.VOLCENGINE_API_KEY)
 
     def render(self, ctx: RenderContext) -> None:
         # TODO: Implement Doubao/Volcengine provider.

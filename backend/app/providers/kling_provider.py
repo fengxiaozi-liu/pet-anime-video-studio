@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
-
+from ..config import get_settings
 from .base import RenderContext
 
 
@@ -11,7 +10,7 @@ class KlingProvider:
     name: str = "kling"
 
     def is_configured(self) -> bool:
-        return bool(os.getenv("KLING_API_KEY"))
+        return bool(get_settings().KLING_API_KEY)
 
     def render(self, ctx: RenderContext) -> None:
         # TODO: Implement Kling (可灵) image-to-video or multi-image-to-video API.

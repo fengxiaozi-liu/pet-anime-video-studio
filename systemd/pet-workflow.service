@@ -1,0 +1,20 @@
+[Unit]
+Description=Pet Anime Video Automated Workflow Runner
+After=network.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/fengxiaozi/.openclaw/workspace/pet-anime-video
+ExecStart=/usr/bin/python3 /home/fengxiaozi/.openclaw/workspace/pet-anime-video/scripts/scheduled-workflow.py --auto
+StandardOutput=append:/home/fengxiaozi/.openclaw/workspace/pet-anime-video/logs/workflow.log
+StandardError=append:/home/fengxiaozi/.openclaw/workspace/pet-anime-video/logs/workflow.log
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/fengxiaozi/.openclaw/workspace/pet-anime-video/logs
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
-
+from ..config import get_settings
 from .base import RenderContext
 
 
@@ -11,7 +10,7 @@ class OpenAIProvider:
     name: str = "openai"
 
     def is_configured(self) -> bool:
-        return bool(os.getenv("OPENAI_API_KEY"))
+        return bool(get_settings().OPENAI_API_KEY)
 
     def render(self, ctx: RenderContext) -> None:
         # TODO: Implement OpenAI video/image pipeline when available/desired.
