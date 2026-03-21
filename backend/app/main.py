@@ -90,9 +90,9 @@ async def lifespan(app: FastAPI):
             logger.info("Security manager initialized with rate limiting (10 req/min, 100 req/hour)")
         except Exception as e:
             logger.warning(f"Failed to initialize security: {e}. Running without auth.")
-            security_manager = SecurityManager(enabled=False)
+            security_manager = SecurityManager(api_keys={}, enabled=False)
     else:
-        security_manager = SecurityManager(enabled=False)
+        security_manager = SecurityManager(api_keys={}, enabled=False)
         logger.info("Security disabled (SECURITY_ENABLED=false, default for local development)")
 
     configured_providers = []

@@ -4,14 +4,20 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>PetClip Studio</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/static/styles.css" />
   </head>
   <body>
     <header class="topbar">
       <div class="brand">
-        <div class="brand__eyebrow">Pet Anime Video</div>
-        <div class="brand__title">PetClip Studio</div>
-        <div class="brand__sub muted">上传宠物图片，写一句故事氛围，快速生成温暖的动漫短视频。</div>
+        <div class="brand__eyebrow">Pet Anime Video Workflow</div>
+        <div class="brand__title-row">
+          <div class="brand__title">PetClip Studio</div>
+          <span class="brand__badge">Anime Story Lab</span>
+        </div>
+        <div class="brand__sub muted">上传宠物图片，写一句故事氛围，快速生成温暖、轻盈、带故事感的动漫短视频。</div>
       </div>
       <div class="topbar__actions">
         <div class="status-chip" id="global_status">空闲中</div>
@@ -25,7 +31,22 @@
           <div class="panel__head panel__head--tight">
             <div>
               <div class="panel__title">开始创作</div>
-              <div class="panel__desc muted">把最常用的输入放在一边：文案、图片、音乐和分镜。</div>
+              <div class="panel__desc muted">把最重要的输入集中在左侧，形成一条顺手的创作链路：文案、图片、音乐和分镜。</div>
+            </div>
+          </div>
+
+          <div class="hero-strip" aria-hidden="true">
+            <div class="hero-strip__item">
+              <span class="hero-strip__kicker">Input</span>
+              <span class="hero-strip__value">Prompt + 图片</span>
+            </div>
+            <div class="hero-strip__item">
+              <span class="hero-strip__kicker">Flow</span>
+              <span class="hero-strip__value">模板驱动</span>
+            </div>
+            <div class="hero-strip__item">
+              <span class="hero-strip__kicker">Output</span>
+              <span class="hero-strip__value">短视频预览</span>
             </div>
           </div>
 
@@ -149,7 +170,7 @@
           <div class="panel__head">
             <div>
               <div class="panel__title">视频预览</div>
-              <div class="panel__desc muted">生成完成后会自动显示。首次本地渲染可能需要几十秒到 2 分钟。</div>
+              <div class="panel__desc muted">生成完成后会自动显示。当前区域优先服务“快速预览”，导出和封面能力可以继续向下扩展。</div>
             </div>
             <div class="output-actions">
               <a id="download_mp4" class="btn is-disabled" href="#" aria-disabled="true">导出 MP4</a>
@@ -176,6 +197,7 @@
     </main>
 
     <script src="/static/app.js"></script>
+    <script src="/static/ui-improvements.js"></script>
     <script>
       const vid = document.getElementById('video');
       const ph = document.getElementById('preview_placeholder');

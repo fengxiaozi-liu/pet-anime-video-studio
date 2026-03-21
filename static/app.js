@@ -413,16 +413,16 @@ $("submit").addEventListener("click", async () => {
     log("creating job...");
     setLoading(true, "正在上传图片...");
     
-    const res = await fetch("/api/jobs", { method: "POST", body: fd });
-    if (!res.ok) {
-      throw new Error(await parseErrorResponse(res));
-    }
-    const { job_id } = await res.json();
+    // Use new upload with progress helper
+    const { job_id } = await uploadWithProgress(fd);
     log(`job_id: ${job_id}`);
 
     activeJobId = job_id;
     await refreshJobs();
     setLoading(true, "正在排队等待渲染...");
+
+    // Start progress simulation for rendering
+    startProgressSimulation();
 
     log("rendering...");
     $("job_hint").textContent = "任务已提交，正在等待渲染反馈。";
@@ -433,11 +433,14 @@ $("submit").addEventListener("click", async () => {
         // Update loading text with stage info
         if (job.stage) {
           setLoading(true, `正在处理：${job.stage}...`);
+          // Sync simulation stage
+          updateProgressStage(job.stage);
         }
       }
     });
 
     setLoading(false);
+    stopProgressSimulation();
     await selectJob(job_id);
     log("done");
   } catch (e) {
@@ -445,8 +448,9 @@ $("submit").addEventListener("click", async () => {
     setGlobalStatus("生成失败", "error");
     log("ERROR: " + (e && e.message ? e.message : String(e)));
     $("job_hint").textContent = "生成失败，请查看下方日志。";
-    alert("Failed: " + (e && e.message ? e.message : String(e)));
+    showErrorMessage("生成失败：" + (e && e.message ? e.message : String(e)));
     setLoading(false);
+    stopProgressSimulation();
   }
 });
 
