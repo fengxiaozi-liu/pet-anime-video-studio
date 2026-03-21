@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from ..domain.models import ProviderConfig, RenderJob, SceneJob
-from ..domain.repositories import StorageService
+from ..domain.repositories import RenderJobRepository, StorageService
 from ..platform_templates import get_platform_template
 
 
@@ -147,7 +147,7 @@ class MaterialAssetService:
 
 
 class JobApplicationService:
-    def __init__(self, render_repo, scene_repo, provider_repo, asset_repo, app_config) -> None:
+    def __init__(self, render_repo: RenderJobRepository, scene_repo, provider_repo, asset_repo, app_config) -> None:
         self.render_repo = render_repo
         self.scene_repo = scene_repo
         self.provider_repo = provider_repo
