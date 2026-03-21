@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import ssl
+import time
 from typing import Any
 from urllib.parse import urlparse
 
@@ -234,6 +236,43 @@ def _raise_for_provider_status(response: httpx.Response) -> None:
         raise ValueError(_extract_provider_error_message(response)) from exc
 
 
+def _is_retryable_transport_error(exc: Exception) -> bool:
+    if isinstance(exc, (httpx.ConnectTimeout, httpx.ReadTimeout, httpx.ConnectError)):
+        return True
+    cause = getattr(exc, "__cause__", None)
+    if isinstance(cause, ssl.SSLError):
+        return True
+    message = str(exc).lower()
+    return "handshake operation timed out" in message or "ssl" in message and "timed out" in message
+
+
+def _post_json_with_retry(
+    *,
+    url: str,
+    headers: dict[str, str],
+    payload: dict[str, Any],
+    timeout: httpx.Timeout,
+    max_attempts: int = 3,
+) -> dict[str, Any]:
+    last_exc: Exception | None = None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            with httpx.Client(timeout=timeout) as client:
+                response = client.post(url, headers=headers, json=payload)
+                _raise_for_provider_status(response)
+                return response.json()
+        except Exception as exc:  # noqa: BLE001
+            last_exc = exc
+            if attempt >= max_attempts or not _is_retryable_transport_error(exc):
+                break
+            time.sleep(1.2 * attempt)
+    if last_exc is not None:
+        if _is_retryable_transport_error(last_exc):
+            raise ValueError("故事助手连接上游超时，请稍后重试或检查当前助手的网络连通性") from last_exc
+        raise last_exc
+    raise ValueError("故事助手请求失败")
+
+
 def _generate_via_openai(
     assistant_config: dict[str, Any],
     *,
@@ -254,11 +293,8 @@ def _generate_via_openai(
         "Content-Type": "application/json",
     }
     url = _openai_messages_url(str(assistant_config["base_url"]))
-    timeout = httpx.Timeout(60.0, connect=15.0)
-    with httpx.Client(timeout=timeout) as client:
-        response = client.post(url, headers=headers, json=payload)
-        _raise_for_provider_status(response)
-        data = response.json()
+    timeout = httpx.Timeout(90.0, connect=30.0)
+    data = _post_json_with_retry(url=url, headers=headers, payload=payload, timeout=timeout)
     choices = data.get("choices") or []
     if not choices:
         raise ValueError("模型未返回 choices")
@@ -289,11 +325,8 @@ def _generate_via_anthropic(
         "content-type": "application/json",
     }
     url = _anthropic_messages_url(str(assistant_config["base_url"]))
-    timeout = httpx.Timeout(60.0, connect=15.0)
-    with httpx.Client(timeout=timeout) as client:
-        response = client.post(url, headers=headers, json=payload)
-        _raise_for_provider_status(response)
-        data = response.json()
+    timeout = httpx.Timeout(90.0, connect=30.0)
+    data = _post_json_with_retry(url=url, headers=headers, payload=payload, timeout=timeout)
     content = _extract_text_content(data.get("content"))
     if not content:
         raise ValueError("模型未返回文本内容")

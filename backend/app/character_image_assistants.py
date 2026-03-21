@@ -3,6 +3,8 @@ from __future__ import annotations
 import base64
 import json
 import mimetypes
+import re
+import time
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -55,6 +57,13 @@ def _openai_image_url(base_url: str) -> str:
     return f"{base}/v1/images/generations"
 
 
+def _openai_task_url(base_url: str, task_id: str) -> str:
+    base = base_url.rstrip("/")
+    if base.endswith("/v1"):
+        return f"{base}/tasks/{task_id}"
+    return f"{base}/v1/tasks/{task_id}"
+
+
 def _anthropic_messages_url(base_url: str) -> str:
     base = base_url.rstrip("/")
     if base.endswith("/messages"):
@@ -75,6 +84,66 @@ def _extract_text_content(content: Any) -> str:
             elif isinstance(item, str):
                 parts.append(item)
         return "\n".join(part for part in parts if part).strip()
+    return ""
+
+
+def _extract_candidate_url(payload: Any) -> str:
+    if isinstance(payload, str):
+        value = payload.strip()
+        if value.startswith("http://") or value.startswith("https://") or value.startswith("data:image/"):
+            return value
+        return ""
+    if isinstance(payload, list):
+        for item in payload:
+            candidate = _extract_candidate_url(item)
+            if candidate:
+                return candidate
+        return ""
+    if not isinstance(payload, dict):
+        return ""
+
+    for key in ("preview_image_url", "image_url", "url"):
+        value = str(payload.get(key) or "").strip()
+        if value:
+            return value
+
+    for key in ("result", "image", "data", "output", "outputs"):
+        if key in payload:
+            candidate = _extract_candidate_url(payload.get(key))
+            if candidate:
+                return candidate
+    return ""
+
+
+def _extract_base64_payload(payload: Any) -> str:
+    if isinstance(payload, str):
+        value = payload.strip()
+        if value.startswith("data:image/"):
+            marker = value.find("base64,")
+            return value[marker + 7 :] if marker >= 0 else ""
+        compact = value.replace("\n", "").replace("\r", "")
+        if len(compact) > 128 and re.fullmatch(r"[A-Za-z0-9+/=]+", compact):
+            return compact
+        return ""
+    if isinstance(payload, list):
+        for item in payload:
+            candidate = _extract_base64_payload(item)
+            if candidate:
+                return candidate
+        return ""
+    if not isinstance(payload, dict):
+        return ""
+
+    for key in ("b64_json", "base64", "image_base64", "image_b64", "image_data"):
+        value = _extract_base64_payload(payload.get(key))
+        if value:
+            return value
+
+    for key in ("result", "image", "data", "output", "outputs"):
+        if key in payload:
+            candidate = _extract_base64_payload(payload.get(key))
+            if candidate:
+                return candidate
     return ""
 
 
@@ -100,6 +169,24 @@ def _extract_json_payload(raw_text: str) -> dict[str, Any]:
     return payload
 
 
+def _raise_payload_error(payload: dict[str, Any]) -> None:
+    message = str(
+        payload.get("message")
+        or payload.get("error")
+        or payload.get("detail")
+        or ""
+    ).strip()
+    code = str(payload.get("code") or "").strip()
+    if message:
+        prefix = f"[{code}] " if code else ""
+        raise ValueError(f"生图助手未返回图片结果：{prefix}{message}")
+
+
+def _raise_missing_image_with_prompt(normalized_prompt: str) -> None:
+    if str(normalized_prompt or "").strip():
+        raise ValueError("当前生图模型只返回了提示词，没有真正生成图片，请更换支持出图的模型或接口。")
+
+
 def _extract_provider_error_message(response: httpx.Response) -> str:
     try:
         payload = response.json()
@@ -111,11 +198,27 @@ def _extract_provider_error_message(response: httpx.Response) -> str:
             message = str(error.get("message") or "").strip()
             if message:
                 return message
+            code = str(error.get("code") or "").strip()
+            if code:
+                return code
         message = str(payload.get("message") or "").strip()
         if message:
             return message
+        detail = payload.get("detail")
+        if isinstance(detail, str) and detail.strip():
+            return detail.strip()
+        if isinstance(detail, dict):
+            detail_message = str(detail.get("message") or detail.get("msg") or "").strip()
+            if detail_message:
+                return detail_message
+        code = str(payload.get("code") or "").strip()
+        if code:
+            return code
     if response.status_code == 429:
         return "生图助手请求被限流或额度不足，请稍后重试并检查配额"
+    text = response.text.strip()
+    if text:
+        return f"上游接口请求失败: HTTP {response.status_code} - {text[:400]}"
     return f"上游接口请求失败: HTTP {response.status_code}"
 
 
@@ -157,40 +260,138 @@ def _save_temp_preview(storage_service, *, image_bytes: bytes, extension: str, f
     return stored.public_url
 
 
+def _cache_preview_url(storage_service, *, preview_url: str, filename_hint: str) -> str:
+    source_url = str(preview_url or "").strip()
+    if not source_url:
+        raise ValueError("preview_image_url 不能为空")
+    filename, image_bytes = download_preview_image(source_url, storage_service=storage_service)
+    extension = Path(filename).suffix or ".png"
+    return _save_temp_preview(
+        storage_service,
+        image_bytes=image_bytes,
+        extension=extension,
+        filename_hint=filename_hint,
+    )
+
+
 def _normalize_openai_image_response(data: dict[str, Any], storage_service, *, filename_hint: str) -> dict[str, Any]:
-    images = data.get("data") or []
-    if not images:
-        raise ValueError("生图助手未返回图片结果")
-    image = images[0] if isinstance(images[0], dict) else {}
-    preview_url = str(image.get("url") or image.get("preview_image_url") or "").strip()
-    normalized_prompt = str(image.get("revised_prompt") or data.get("normalized_prompt") or "").strip()
+    _raise_payload_error(data)
+    images = data.get("data") or data.get("output") or data.get("outputs") or []
+    image = images[0] if isinstance(images, list) and images else (images if isinstance(images, dict) else {})
+    normalized_prompt = str(
+        (image if isinstance(image, dict) else {}).get("revised_prompt")
+        or data.get("normalized_prompt")
+        or data.get("revised_prompt")
+        or ""
+    ).strip()
+    preview_url = _extract_candidate_url(image or data)
     if preview_url:
-        return {"preview_image_url": preview_url, "normalized_prompt": normalized_prompt}
-    b64_json = str(image.get("b64_json") or "").strip()
+        return {
+            "preview_image_url": _cache_preview_url(storage_service, preview_url=preview_url, filename_hint=filename_hint),
+            "normalized_prompt": normalized_prompt,
+        }
+    b64_json = _extract_base64_payload(image or data)
     if not b64_json:
-        raise ValueError("生图助手返回缺少 preview_image_url")
+        choices = data.get("choices") or []
+        if choices:
+            message = (choices[0] or {}).get("message") or {}
+            content = _extract_text_content(message.get("content"))
+            if content:
+                try:
+                    payload = _extract_json_payload(content)
+                except Exception:
+                    payload = {"preview_image_url": _extract_candidate_url(content), "b64_json": _extract_base64_payload(content)}
+                if isinstance(payload, dict):
+                    _raise_payload_error(payload)
+                preview_url = _extract_candidate_url(payload)
+                if preview_url:
+                    return {
+                        "preview_image_url": _cache_preview_url(storage_service, preview_url=preview_url, filename_hint=filename_hint),
+                        "normalized_prompt": str(payload.get("normalized_prompt") or normalized_prompt or "").strip(),
+                    }
+                b64_json = _extract_base64_payload(payload)
+        if not b64_json:
+            _raise_missing_image_with_prompt(normalized_prompt)
+            raise ValueError("生图助手返回缺少可识别的图片字段")
     image_bytes = base64.b64decode(b64_json)
     preview_url = _save_temp_preview(storage_service, image_bytes=image_bytes, extension=".png", filename_hint=filename_hint)
     return {"preview_image_url": preview_url, "normalized_prompt": normalized_prompt}
 
 
+def _is_modelscope_openai_compatible(base_url: str) -> bool:
+    host = (urlparse(str(base_url or "")).netloc or "").lower()
+    return "modelscope.cn" in host
+
+
+def _poll_modelscope_task(
+    client: httpx.Client,
+    *,
+    base_url: str,
+    api_key: str,
+    task_id: str,
+    filename_hint: str,
+    storage_service,
+    normalized_prompt: str,
+) -> dict[str, Any]:
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "X-ModelScope-Task-Type": "image_generation",
+    }
+    url = _openai_task_url(base_url, task_id)
+    deadline = time.monotonic() + 180.0
+    last_payload: dict[str, Any] | None = None
+    while time.monotonic() < deadline:
+        response = client.get(url, headers=headers)
+        _raise_for_provider_status(response)
+        data = response.json()
+        if isinstance(data, dict):
+            last_payload = data
+        status = str((data or {}).get("task_status") or "").upper()
+        if status == "SUCCEED":
+            preview_url = _extract_candidate_url(data.get("output_images") or data)
+            if not preview_url:
+                _raise_payload_error(data)
+                raise ValueError("生图助手任务已完成，但未返回 output_images")
+            return {
+                "preview_image_url": _cache_preview_url(
+                    storage_service,
+                    preview_url=preview_url,
+                    filename_hint=filename_hint,
+                ),
+                "normalized_prompt": normalized_prompt,
+            }
+        if status == "FAILED":
+            _raise_payload_error(data)
+            raise ValueError("生图助手任务执行失败")
+        time.sleep(2.0)
+    if last_payload:
+        _raise_payload_error(last_payload)
+    raise ValueError("生图助手任务轮询超时，请稍后重试")
+
+
 def _normalize_anthropic_response(data: dict[str, Any], storage_service, *, filename_hint: str) -> dict[str, Any]:
-    if data.get("preview_image_url"):
+    _raise_payload_error(data)
+    if _extract_candidate_url(data):
         return {
-            "preview_image_url": str(data.get("preview_image_url") or "").strip(),
+            "preview_image_url": _cache_preview_url(storage_service, preview_url=_extract_candidate_url(data), filename_hint=filename_hint),
             "normalized_prompt": str(data.get("normalized_prompt") or "").strip(),
         }
     content = _extract_text_content(data.get("content"))
     if not content:
         raise ValueError("生图助手未返回文本内容")
     payload = _extract_json_payload(content)
-    preview_url = str(payload.get("preview_image_url") or payload.get("image_url") or payload.get("url") or "").strip()
+    _raise_payload_error(payload)
+    preview_url = _extract_candidate_url(payload)
     normalized_prompt = str(payload.get("normalized_prompt") or "").strip()
     if preview_url:
-        return {"preview_image_url": preview_url, "normalized_prompt": normalized_prompt}
-    b64_json = str(payload.get("b64_json") or "").strip()
+        return {
+            "preview_image_url": _cache_preview_url(storage_service, preview_url=preview_url, filename_hint=filename_hint),
+            "normalized_prompt": normalized_prompt,
+        }
+    b64_json = _extract_base64_payload(payload)
     if not b64_json:
-        raise ValueError("生图助手返回缺少 preview_image_url")
+        _raise_missing_image_with_prompt(normalized_prompt)
+        raise ValueError("生图助手返回缺少可识别的图片字段")
     image_bytes = base64.b64decode(b64_json)
     preview_url = _save_temp_preview(storage_service, image_bytes=image_bytes, extension=".png", filename_hint=filename_hint)
     return {"preview_image_url": preview_url, "normalized_prompt": normalized_prompt}
@@ -246,17 +447,32 @@ def generate_character_preview(
         "model": assistant_config["model"],
         "prompt": prompt,
         "size": "1024x1024",
-        "response_format": "b64_json",
     }
     headers = {
         "Authorization": f"Bearer {assistant_config['api_key']}",
         "Content-Type": "application/json",
     }
+    if _is_modelscope_openai_compatible(str(assistant_config["base_url"])):
+        headers["X-ModelScope-Async-Mode"] = "true"
+    else:
+        payload["response_format"] = "b64_json"
     url = _openai_image_url(str(assistant_config["base_url"]))
     with httpx.Client(timeout=timeout) as client:
         response = client.post(url, headers=headers, json=payload)
         _raise_for_provider_status(response)
         data = response.json()
+        task_id = str((data or {}).get("task_id") or "").strip()
+        if task_id:
+            result = _poll_modelscope_task(
+                client,
+                base_url=str(assistant_config["base_url"]),
+                api_key=str(assistant_config["api_key"]),
+                task_id=task_id,
+                filename_hint=filename_hint,
+                storage_service=storage_service,
+                normalized_prompt=prompt,
+            )
+            return {**result, "normalized_prompt": result.get("normalized_prompt") or prompt}
     result = _normalize_openai_image_response(data, storage_service, filename_hint=filename_hint)
     return {**result, "normalized_prompt": result.get("normalized_prompt") or prompt}
 
