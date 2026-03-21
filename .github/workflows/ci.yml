@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  backend-checks:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: "pip"
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      - name: FastAPI smoke check
+        run: |
+          python - <<'PY'
+          from fastapi.testclient import TestClient
+          from backend.app.main import app
+
+          client = TestClient(app)
+
+          assert client.get("/health").status_code == 200
+          assert client.get("/").status_code == 200
+          assert client.get("/studio").status_code == 200
+          assert client.get("/static/styles.css").status_code == 200
+          print("smoke-check ok")
+          PY
+
+      - name: Run stable pytest subset
+        run: |
+          pytest \
+            backend/tests/test_assets.py \
+            backend/tests/test_schema.py \
+            backend/tests/test_security.py \
+            --cov=backend/app \
+            --cov-report=term-missing \
+            --cov-report=html:front/htmlcov
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: front-htmlcov
+          path: front/htmlcov
+
+  docker-build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t pet-anime-video-ci .
