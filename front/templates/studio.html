@@ -19,11 +19,21 @@
       </a>
       <div class="topbar-provider topbar-provider--push">
         <label for="story_assistant_select">故事助手</label>
-        <select id="story_assistant_select"></select>
+        <div class="topbar-provider__controls">
+          <select id="story_assistant_select"></select>
+        </div>
+      </div>
+      <div class="topbar-provider">
+        <label for="image_assistant_select">生图助手</label>
+        <div class="topbar-provider__controls">
+          <select id="image_assistant_select"></select>
+        </div>
       </div>
       <div class="topbar-provider">
         <label for="studio_provider">视频助手</label>
-        <select id="studio_provider"></select>
+        <div class="topbar-provider__controls">
+          <select id="studio_provider"></select>
+        </div>
       </div>
       <a class="topbar-link" href="/tasks">任务列表</a>
     </header>
@@ -49,6 +59,10 @@
         <section class="studio-panel studio-panel--editor">
           <div class="editor-header">
             <div class="status-chip" id="global_status">空闲中</div>
+            <div class="editor-header__actions">
+              <button id="character_binding_toggle" class="btn btn--secondary" type="button">角色绑定</button>
+              <button id="frame_binding_toggle" class="btn btn--secondary" type="button">绑定首尾帧</button>
+            </div>
           </div>
 
           <div class="document-card">
@@ -88,6 +102,7 @@
         <section class="studio-panel studio-panel--resources">
           <div class="resource-tabs">
             <button class="resource-tab is-active" data-tab="visual">画面</button>
+            <button class="resource-tab" data-tab="frames">首尾帧</button>
             <button class="resource-tab" data-tab="character">角色</button>
             <button class="resource-tab" data-tab="voice">配音</button>
             <button class="resource-tab" data-tab="music">音乐</button>

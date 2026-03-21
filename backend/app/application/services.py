@@ -7,7 +7,12 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
-from ..domain.models import ProviderConfig, RenderJob, SceneJob, StoryAssistantConfig
+from ..character_image_assistants import (
+    download_preview_image,
+    generate_character_preview,
+    validate_character_image_assistant_config,
+)
+from ..domain.models import CharacterImageAssistantConfig, ProviderConfig, RenderJob, SceneJob, StoryAssistantConfig
 from ..domain.repositories import RenderJobRepository, StorageService
 from ..platform_templates import get_platform_template
 from ..providers.custom_model_provider import custom_provider_fields, is_custom_provider_code
@@ -248,6 +253,130 @@ class StoryAssistantConfigService:
         )
 
 
+class CharacterImageAssistantConfigService:
+    def __init__(self, assistant_repo, app_config, storage: StorageService, material_service: "MaterialAssetService") -> None:
+        self.assistant_repo = assistant_repo
+        self.app_config = app_config
+        self.storage = storage
+        self.material_service = material_service
+
+    def seed_from_config(self) -> None:
+        for assistant_code, raw in self.app_config.character_image_assistants.items():
+            payload = dict(raw or {})
+            config = CharacterImageAssistantConfig(
+                assistant_code=assistant_code,
+                display_name=str(payload.get("display_name") or assistant_code),
+                enabled=bool(payload.get("enabled", False)),
+                sort_order=int(payload.get("sort_order") or 100),
+                description=str(payload.get("description") or ""),
+                protocol=str(payload.get("protocol") or "openai"),
+                base_url=str(payload.get("base_url") or ""),
+                api_key=str(payload.get("api_key") or ""),
+                model=str(payload.get("model") or ""),
+                system_prompt=str(payload.get("system_prompt") or ""),
+                is_valid=not validate_character_image_assistant_config(payload),
+                last_checked_at=time.time(),
+                last_error=None,
+                created_at=time.time(),
+                updated_at=time.time(),
+            )
+            self.assistant_repo.seed(config)
+
+    def list_configs_for_ui(self) -> list[dict[str, Any]]:
+        return [asdict(item) for item in self.assistant_repo.list_all()]
+
+    def list_available(self) -> list[dict[str, Any]]:
+        return [
+            {
+                "assistant_code": item.assistant_code,
+                "display_name": item.display_name,
+                "description": item.description,
+                "protocol": item.protocol,
+                "model": item.model,
+            }
+            for item in self.assistant_repo.list_all()
+            if item.enabled and item.is_valid
+        ]
+
+    def validate(self, payload: dict[str, Any]) -> list[str]:
+        return validate_character_image_assistant_config(payload)
+
+    def update(self, assistant_code: str, payload: dict[str, Any]) -> dict[str, Any]:
+        errors = self.validate(payload)
+        config = CharacterImageAssistantConfig(
+            assistant_code=assistant_code,
+            display_name=str(payload.get("display_name") or assistant_code),
+            enabled=bool(payload.get("enabled", False)),
+            sort_order=int(payload.get("sort_order") or 100),
+            description=str(payload.get("description") or ""),
+            protocol=str(payload.get("protocol") or "openai"),
+            base_url=str(payload.get("base_url") or ""),
+            api_key=str(payload.get("api_key") or ""),
+            model=str(payload.get("model") or ""),
+            system_prompt=str(payload.get("system_prompt") or ""),
+            is_valid=not errors,
+            last_checked_at=time.time(),
+            last_error=None if not errors else "；".join(errors),
+            created_at=time.time(),
+            updated_at=time.time(),
+        )
+        return asdict(self.assistant_repo.upsert(config))
+
+    def generate(
+        self,
+        assistant_code: str,
+        *,
+        character_name: str,
+        character_description: str,
+        story_summary: str | None,
+        story_setting: str | None,
+        visual_style_name: str | None,
+        visual_style_prompt: str | None,
+    ) -> dict[str, Any]:
+        config = self.assistant_repo.get(assistant_code)
+        if config is None:
+            raise ValueError("生图助手不存在")
+        if not config.enabled:
+            raise ValueError("生图助手未启用")
+        if not config.is_valid:
+            raise ValueError(config.last_error or "生图助手配置未通过校验")
+        return generate_character_preview(
+            asdict(config),
+            storage_service=self.storage,
+            character_name=character_name,
+            character_description=character_description,
+            story_summary=story_summary,
+            story_setting=story_setting,
+            visual_style_name=visual_style_name,
+            visual_style_prompt=visual_style_prompt,
+        )
+
+    def confirm_preview(
+        self,
+        *,
+        preview_image_url: str,
+        name: str,
+        description: str,
+        prompt_fragment: str,
+        group_name: str,
+        sort_order: int = 100,
+    ) -> dict[str, Any]:
+        file_name, file_bytes = download_preview_image(preview_image_url, storage_service=self.storage)
+        return self.material_service.create_asset(
+            "characters",
+            {
+                "name": name,
+                "description": description,
+                "prompt_fragment": prompt_fragment,
+                "group_name": group_name or "默认分组",
+                "enabled": True,
+                "sort_order": int(sort_order or 100),
+            },
+            file_name=file_name,
+            file_bytes=file_bytes,
+        )
+
+
 class MaterialAssetService:
     def __init__(self, asset_repo, storage: StorageService) -> None:
         self.asset_repo = asset_repo
@@ -259,7 +388,7 @@ class MaterialAssetService:
     def create_asset(self, asset_type: str, metadata: dict[str, Any], *, file_name: str, file_bytes: bytes) -> dict[str, Any]:
         stored = self.storage.save_bytes(filename=file_name, data=file_bytes, category=asset_type)
         payload = {**metadata, "path": stored.path, "mime_type": stored.mime_type, "size_bytes": stored.size_bytes}
-        if asset_type == "visuals":
+        if asset_type in {"visuals", "frames"}:
             payload["cover_path"] = stored.path
         if asset_type == "characters":
             payload["image_path"] = stored.path
@@ -276,7 +405,7 @@ class MaterialAssetService:
             old_path = existing.get("path")
             stored = self.storage.save_bytes(filename=file_name, data=file_bytes, category=asset_type)
             payload.update({"path": stored.path, "mime_type": stored.mime_type, "size_bytes": stored.size_bytes})
-            if asset_type == "visuals":
+            if asset_type in {"visuals", "frames"}:
                 payload["cover_path"] = stored.path
             if asset_type == "characters":
                 payload["image_path"] = stored.path
@@ -327,6 +456,20 @@ class JobApplicationService:
                 storyboard["visual_asset_url"] = visual_asset.get("public_url")
                 storyboard["style_prompt"] = visual_asset.get("prompt_fragment") or storyboard.get("style_prompt", "")
 
+        opening_frame_asset_id = storyboard.get("opening_frame_asset_id")
+        if opening_frame_asset_id and not storyboard.get("opening_frame_url"):
+            opening_frame_asset = self.asset_repo.get_asset("frames", opening_frame_asset_id)
+            if opening_frame_asset:
+                storyboard["opening_frame_asset_id"] = opening_frame_asset["id"]
+                storyboard["opening_frame_url"] = opening_frame_asset.get("cover_url") or opening_frame_asset.get("public_url")
+
+        ending_frame_asset_id = storyboard.get("ending_frame_asset_id")
+        if ending_frame_asset_id and not storyboard.get("ending_frame_url"):
+            ending_frame_asset = self.asset_repo.get_asset("frames", ending_frame_asset_id)
+            if ending_frame_asset:
+                storyboard["ending_frame_asset_id"] = ending_frame_asset["id"]
+                storyboard["ending_frame_url"] = ending_frame_asset.get("cover_url") or ending_frame_asset.get("public_url")
+
         selected_characters = []
         for char_id in storyboard.get("character_ids", []):
             item = self.asset_repo.get_asset("characters", char_id)
@@ -374,6 +517,8 @@ class JobApplicationService:
             ]
             scene["visual_asset_id"] = scene.get("visual_asset_id") or storyboard.get("visual_asset_id")
             scene["visual_asset_url"] = scene.get("visual_asset_url") or storyboard.get("visual_asset_url")
+            scene["opening_frame_url"] = scene.get("opening_frame_url") or storyboard.get("opening_frame_url")
+            scene["ending_frame_url"] = scene.get("ending_frame_url") or storyboard.get("ending_frame_url")
         render_job = RenderJob(
             job_id=job_id,
             backend=backend,

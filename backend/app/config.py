@@ -60,6 +60,7 @@ class AppConfig(BaseModel):
     storage: StorageSection = Field(default_factory=StorageSection)
     providers: dict[str, dict[str, Any]] = Field(default_factory=dict)
     story_assistants: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    character_image_assistants: dict[str, dict[str, Any]] = Field(default_factory=dict)
     worker: WorkerSection = Field(default_factory=WorkerSection)
 
     @property

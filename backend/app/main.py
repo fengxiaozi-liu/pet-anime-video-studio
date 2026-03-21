@@ -16,12 +16,19 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
 from starlette.requests import Request
 
-from .application.services import JobApplicationService, MaterialAssetService, ProviderConfigService, StoryAssistantConfigService
+from .application.services import (
+    CharacterImageAssistantConfigService,
+    JobApplicationService,
+    MaterialAssetService,
+    ProviderConfigService,
+    StoryAssistantConfigService,
+)
 from .assets import AssetStore
 from .config import get_settings
 from .export_package import generate_export_package
 from .infrastructure.sqlite_repositories import (
     SqliteAssetRepository,
+    SqliteCharacterImageAssistantConfigRepository,
     SqliteDatabase,
     SqliteProviderConfigRepository,
     SqliteRenderJobRepository,
@@ -57,6 +64,7 @@ scene_repo = SqliteSceneJobRepository(db)
 render_repo = SqliteRenderJobRepository(db, scene_repo)
 provider_repo = SqliteProviderConfigRepository(db)
 story_assistant_repo = SqliteStoryAssistantConfigRepository(db)
+character_image_assistant_repo = SqliteCharacterImageAssistantConfigRepository(db)
 asset_repo = SqliteAssetRepository(db, settings.STORAGE_PUBLIC_BASE_URL)
 storage_service = LocalStorageService(base_dir=settings.STORAGE_BASE_DIR, public_base_url=settings.STORAGE_PUBLIC_BASE_URL)
 assets = AssetStore(root_dir=UPLOAD_DIR / "assets", index_path=DATA_DIR / "assets.json")
@@ -74,6 +82,12 @@ provider_registry = ProviderRegistryAdapter()
 provider_service = ProviderConfigService(provider_repo, provider_registry, settings)
 story_assistant_service = StoryAssistantConfigService(story_assistant_repo, settings)
 material_service = MaterialAssetService(asset_repo, storage_service)
+character_image_assistant_service = CharacterImageAssistantConfigService(
+    character_image_assistant_repo,
+    settings,
+    storage_service,
+    material_service,
+)
 job_service = JobApplicationService(render_repo, scene_repo, provider_repo, asset_repo, settings)
 
 
@@ -115,6 +129,37 @@ class StoryAssistantGenerateRequest(BaseModel):
     visual_style_name: str | None = None
     visual_style_prompt: str | None = None
     characters: list[StoryAssistantGenerateCharacter] = Field(default_factory=list)
+
+
+class CharacterImageAssistantConfigPayload(BaseModel):
+    display_name: str
+    enabled: bool = False
+    sort_order: int = 100
+    description: str = ""
+    protocol: str = "openai"
+    base_url: str = ""
+    api_key: str = ""
+    model: str = ""
+    system_prompt: str = ""
+
+
+class CharacterImageGenerateRequest(BaseModel):
+    assistant_code: str
+    character_name: str
+    character_description: str = ""
+    story_summary: str = ""
+    story_setting: str = ""
+    visual_style_name: str = ""
+    visual_style_prompt: str = ""
+
+
+class CharacterImageConfirmRequest(BaseModel):
+    preview_image_url: str
+    name: str
+    description: str = ""
+    prompt_fragment: str = ""
+    group_name: str = "默认分组"
+    sort_order: int = 100
 
 
 async def verify_api_credentials(credentials: HTTPBasicCredentials | None = Depends(security)):
@@ -173,6 +218,7 @@ async def lifespan(app: FastAPI):
 
     provider_service.seed_from_config()
     story_assistant_service.seed_from_config()
+    character_image_assistant_service.seed_from_config()
     configured = [item["provider_code"] for item in provider_service.list_available()]
     if configured:
         logger.info("Configured providers: %s", ", ".join(configured))
@@ -183,6 +229,11 @@ async def lifespan(app: FastAPI):
         logger.info("Available story assistants: %s", ", ".join(assistants))
     else:
         logger.warning("No available story assistants configured.")
+    image_assistants = [item["assistant_code"] for item in character_image_assistant_service.list_available()]
+    if image_assistants:
+        logger.info("Available character image assistants: %s", ", ".join(image_assistants))
+    else:
+        logger.warning("No available character image assistants configured.")
 
     task_worker = TaskWorker(
         render_repo=render_repo,
@@ -270,6 +321,11 @@ def list_available_story_assistants(_user: str = Depends(authenticated_endpoint)
     return {"story_assistants": story_assistant_service.list_available()}
 
 
+@app.get("/api/character-image-assistants")
+def list_available_character_image_assistants(_user: str = Depends(authenticated_endpoint)) -> dict[str, Any]:
+    return {"character_image_assistants": character_image_assistant_service.list_available()}
+
+
 @app.get("/api/provider-configs")
 def list_provider_configs(_user: str = Depends(authenticated_endpoint)) -> dict[str, Any]:
     return {"provider_configs": provider_service.list_configs_for_ui()}
@@ -278,6 +334,11 @@ def list_provider_configs(_user: str = Depends(authenticated_endpoint)) -> dict[
 @app.get("/api/story-assistant-configs")
 def list_story_assistant_configs(_user: str = Depends(authenticated_endpoint)) -> dict[str, Any]:
     return {"story_assistant_configs": story_assistant_service.list_configs_for_ui()}
+
+
+@app.get("/api/character-image-assistant-configs")
+def list_character_image_assistant_configs(_user: str = Depends(authenticated_endpoint)) -> dict[str, Any]:
+    return {"character_image_assistant_configs": character_image_assistant_service.list_configs_for_ui()}
 
 
 @app.put("/api/provider-configs/{provider_code}")
@@ -338,6 +399,28 @@ def validate_story_assistant_config(
     return {"ok": not errors, "errors": errors, "assistant_code": assistant_code}
 
 
+@app.put("/api/character-image-assistant-configs/{assistant_code}")
+def update_character_image_assistant_config(
+    assistant_code: str,
+    body: CharacterImageAssistantConfigPayload,
+    _user: str = Depends(authenticated_endpoint),
+) -> dict[str, Any]:
+    assistant_code = assistant_code.strip()
+    if not assistant_code:
+        raise HTTPException(status_code=400, detail="assistant_code is required")
+    return {"character_image_assistant_config": character_image_assistant_service.update(assistant_code, body.model_dump())}
+
+
+@app.post("/api/character-image-assistant-configs/{assistant_code}/validate")
+def validate_character_image_assistant_config(
+    assistant_code: str,
+    body: CharacterImageAssistantConfigPayload,
+    _user: str = Depends(authenticated_endpoint),
+) -> dict[str, Any]:
+    errors = character_image_assistant_service.validate(body.model_dump())
+    return {"ok": not errors, "errors": errors, "assistant_code": assistant_code}
+
+
 @app.post("/api/story-assistants/generate")
 def generate_story_assistant_draft(
     body: StoryAssistantGenerateRequest,
@@ -363,6 +446,53 @@ def generate_story_assistant_draft(
     return draft
 
 
+@app.post("/api/character-image-assistants/generate")
+def generate_character_image_preview(
+    body: CharacterImageGenerateRequest,
+    _user: str = Depends(authenticated_endpoint),
+) -> dict[str, Any]:
+    character_name = body.character_name.strip()
+    if not character_name:
+        raise HTTPException(status_code=400, detail="character_name is required")
+    try:
+        result = character_image_assistant_service.generate(
+            body.assistant_code,
+            character_name=character_name,
+            character_description=body.character_description,
+            story_summary=body.story_summary or None,
+            story_setting=body.story_setting or None,
+            visual_style_name=body.visual_style_name or None,
+            visual_style_prompt=body.visual_style_prompt or None,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"生图失败: {exc}") from exc
+    return result
+
+
+@app.post("/api/character-image-assistants/confirm")
+def confirm_character_image_preview(
+    body: CharacterImageConfirmRequest,
+    _user: str = Depends(authenticated_endpoint),
+) -> dict[str, Any]:
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="name is required")
+    try:
+        item = character_image_assistant_service.confirm_preview(
+            preview_image_url=body.preview_image_url,
+            name=name,
+            description=body.description,
+            prompt_fragment=body.prompt_fragment,
+            group_name=body.group_name,
+            sort_order=body.sort_order,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"item": item}
+
+
 @app.get("/api/platform-templates")
 def get_platform_templates(_user: str = Depends(authenticated_endpoint)) -> dict[str, Any]:
     return {"templates": list_platform_templates()}
@@ -380,7 +510,7 @@ def get_material_configs(_user: str = Depends(authenticated_endpoint)) -> dict[s
 
 @app.post("/api/material-configs/{material_type}")
 async def create_material_config(
-    material_type: Literal["visuals", "characters", "voices", "music"],
+    material_type: Literal["visuals", "frames", "characters", "voices", "music"],
     metadata_json: str = Form("{}"),
     file: UploadFile | None = File(default=None),
     _user: str = Depends(authenticated_endpoint),
@@ -405,7 +535,7 @@ async def create_material_config(
 
 @app.put("/api/material-configs/{material_type}/{item_id}")
 async def update_material_config(
-    material_type: Literal["visuals", "characters", "voices", "music"],
+    material_type: Literal["visuals", "frames", "characters", "voices", "music"],
     item_id: str,
     metadata_json: str = Form("{}"),
     file: UploadFile | None = File(default=None),
@@ -436,7 +566,7 @@ async def update_material_config(
 
 @app.delete("/api/material-configs/{material_type}/{item_id}")
 def delete_material_config(
-    material_type: Literal["visuals", "characters", "voices", "music"],
+    material_type: Literal["visuals", "frames", "characters", "voices", "music"],
     item_id: str,
     _user: str = Depends(authenticated_endpoint),
 ) -> dict[str, Any]:
@@ -457,9 +587,9 @@ async def create_job(
     subtitles: bool = Form(True),
     bgm_volume: float = Form(0.25),
     bgm: UploadFile | None = File(default=None),
+    opening_frame: UploadFile | None = File(default=None),
+    ending_frame: UploadFile | None = File(default=None),
 ) -> dict[str, Any]:
-    if provider != "jimeng":
-        raise HTTPException(status_code=400, detail="当前仅支持 jimeng provider。")
     if not (0.0 <= bgm_volume <= 2.0):
         raise HTTPException(status_code=400, detail="bgm_volume must be between 0.0 and 2.0.")
 
@@ -491,6 +621,28 @@ async def create_job(
             raise HTTPException(status_code=400, detail="Uploaded BGM file is empty.")
         stored = storage_service.save_bytes(filename=bgm.filename or f"bgm{suffix}", data=bgm_bytes, category="job-bgm")
         bgm_path = str(settings.STORAGE_BASE_DIR / stored.path)
+
+    if opening_frame is not None:
+        opening_bytes = await opening_frame.read()
+        if not opening_bytes:
+            raise HTTPException(status_code=400, detail="Uploaded opening_frame file is empty.")
+        stored = storage_service.save_bytes(
+            filename=opening_frame.filename or "opening-frame.png",
+            data=opening_bytes,
+            category="job-frames",
+        )
+        sb = sb.model_copy(update={"opening_frame_url": stored.public_url})
+
+    if ending_frame is not None:
+        ending_bytes = await ending_frame.read()
+        if not ending_bytes:
+            raise HTTPException(status_code=400, detail="Uploaded ending_frame file is empty.")
+        stored = storage_service.save_bytes(
+            filename=ending_frame.filename or "ending-frame.png",
+            data=ending_bytes,
+            category="job-frames",
+        )
+        sb = sb.model_copy(update={"ending_frame_url": stored.public_url})
 
     try:
         job_id = job_service.create_job(

@@ -152,11 +152,23 @@ class CustomModelProvider(BaseProvider):
         protocol = str(provider_config_json.get("protocol") or "openai").strip().lower()
         prompt = self._build_prompt(scene)
         base_url = str(provider_config_json["base_url"]).strip()
+        opening_frame_url = str(
+            scene.scene_payload.get("opening_frame_url")
+            or scene.storyboard.get("opening_frame_url")
+            or ""
+        ).strip()
+        ending_frame_url = str(
+            scene.scene_payload.get("ending_frame_url")
+            or scene.storyboard.get("ending_frame_url")
+            or ""
+        ).strip()
         reference_image_urls = [
             str(url or "").strip()
             for url in [
+                opening_frame_url,
                 scene.scene_payload.get("visual_asset_url"),
                 *(scene.scene_payload.get("character_image_urls") or []),
+                ending_frame_url,
             ]
             if str(url or "").strip()
         ]
@@ -165,6 +177,8 @@ class CustomModelProvider(BaseProvider):
             "scene_index": scene.scene_index,
             "scene": scene.scene_payload,
             "storyboard": scene.storyboard,
+            "opening_frame_url": opening_frame_url or None,
+            "ending_frame_url": ending_frame_url or None,
             "reference_image_urls": reference_image_urls,
         }
         if protocol == "anthropic":

@@ -101,10 +101,32 @@ class JimengProvider(BaseProvider):
 
     def _resolve_reference_image_urls(self, scene: SceneTaskContext) -> list[str]:
         urls: list[str] = []
+        frame_candidates = [
+            scene.scene_payload.get("opening_frame_url"),
+            scene.storyboard.get("opening_frame_url"),
+        ]
+        for value in frame_candidates:
+            candidate = str(value or "").strip()
+            if not candidate:
+                continue
+            parsed = urlparse(candidate)
+            if parsed.scheme in {"http", "https"} and parsed.netloc and candidate not in urls:
+                urls.append(candidate)
         visual_asset_url = self._resolve_visual_asset_url(scene)
         if visual_asset_url:
             urls.append(visual_asset_url)
         for value in (scene.scene_payload.get("character_image_urls") or scene.storyboard.get("character_image_urls") or []):
+            candidate = str(value or "").strip()
+            if not candidate:
+                continue
+            parsed = urlparse(candidate)
+            if parsed.scheme in {"http", "https"} and parsed.netloc and candidate not in urls:
+                urls.append(candidate)
+        ending_candidates = [
+            scene.scene_payload.get("ending_frame_url"),
+            scene.storyboard.get("ending_frame_url"),
+        ]
+        for value in ending_candidates:
             candidate = str(value or "").strip()
             if not candidate:
                 continue

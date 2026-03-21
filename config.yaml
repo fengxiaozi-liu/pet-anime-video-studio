@@ -43,6 +43,18 @@ story_assistants:
     system_prompt: ""
     temperature: 0.7
 
+character_image_assistants:
+  default:
+    display_name: "默认角色出图助手"
+    enabled: false
+    sort_order: 100
+    description: "按角色描述生成角色参考图的独立助手"
+    protocol: "openai"
+    base_url: "https://api.openai.com/v1"
+    api_key: ""
+    model: "gpt-image-1"
+    system_prompt: ""
+
 worker:
   poll_interval_s: 2.0
   max_retry: 20

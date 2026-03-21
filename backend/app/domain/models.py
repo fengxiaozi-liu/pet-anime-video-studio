@@ -103,6 +103,26 @@ class StoryAssistantConfig:
 
 
 @dataclass(slots=True)
+class CharacterImageAssistantConfig:
+    assistant_code: str
+    display_name: str
+    enabled: bool
+    sort_order: int
+    description: str
+    protocol: str
+    base_url: str
+    api_key: str
+    model: str
+    system_prompt: str
+    is_valid: bool
+    last_checked_at: float | None
+    last_error: str | None
+    created_at: float
+    updated_at: float
+    id: int | None = None
+
+
+@dataclass(slots=True)
 class AssetBase:
     id: str
     name: str

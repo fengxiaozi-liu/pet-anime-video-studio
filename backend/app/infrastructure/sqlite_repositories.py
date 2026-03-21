@@ -8,7 +8,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from ..domain.models import ProviderConfig, RenderJob, SceneJob, StoryAssistantConfig
+from ..domain.models import CharacterImageAssistantConfig, ProviderConfig, RenderJob, SceneJob, StoryAssistantConfig
 
 
 def _now() -> float:
@@ -140,7 +140,39 @@ class SqliteDatabase:
                     created_at REAL NOT NULL,
                     updated_at REAL NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS character_image_assistants (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    assistant_code TEXT NOT NULL UNIQUE,
+                    display_name TEXT NOT NULL,
+                    enabled INTEGER NOT NULL DEFAULT 0,
+                    sort_order INTEGER NOT NULL DEFAULT 100,
+                    description TEXT,
+                    protocol TEXT NOT NULL DEFAULT 'openai',
+                    base_url TEXT NOT NULL DEFAULT '',
+                    api_key TEXT NOT NULL DEFAULT '',
+                    model TEXT NOT NULL DEFAULT '',
+                    system_prompt TEXT NOT NULL DEFAULT '',
+                    is_valid INTEGER NOT NULL DEFAULT 0,
+                    last_checked_at REAL,
+                    last_error TEXT,
+                    created_at REAL NOT NULL,
+                    updated_at REAL NOT NULL
+                );
                 CREATE TABLE IF NOT EXISTS visual_assets (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    description TEXT,
+                    path TEXT NOT NULL,
+                    mime_type TEXT NOT NULL,
+                    size_bytes INTEGER NOT NULL DEFAULT 0,
+                    prompt_fragment TEXT,
+                    cover_path TEXT,
+                    enabled INTEGER NOT NULL DEFAULT 1,
+                    sort_order INTEGER NOT NULL DEFAULT 100,
+                    created_at REAL NOT NULL,
+                    updated_at REAL NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS frame_assets (
                     id TEXT PRIMARY KEY,
                     name TEXT NOT NULL,
                     description TEXT,
@@ -205,6 +237,7 @@ class SqliteDatabase:
                 """
             )
             self._ensure_story_assistant_protocol(conn)
+            self._ensure_character_image_assistant_protocol(conn)
             self._ensure_character_asset_group_name(conn)
 
     def _ensure_character_asset_group_name(self, conn: sqlite3.Connection) -> None:
@@ -226,6 +259,18 @@ class SqliteDatabase:
         conn.execute(
             """
             UPDATE story_assistants
+            SET protocol = 'openai'
+            WHERE protocol IS NULL OR TRIM(protocol) = ''
+            """
+        )
+
+    def _ensure_character_image_assistant_protocol(self, conn: sqlite3.Connection) -> None:
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(character_image_assistants)").fetchall()}
+        if "protocol" not in columns:
+            conn.execute("ALTER TABLE character_image_assistants ADD COLUMN protocol TEXT NOT NULL DEFAULT 'openai'")
+        conn.execute(
+            """
+            UPDATE character_image_assistants
             SET protocol = 'openai'
             WHERE protocol IS NULL OR TRIM(protocol) = ''
             """
@@ -425,9 +470,114 @@ class SqliteStoryAssistantConfigRepository:
         self.upsert(config)
 
 
+class SqliteCharacterImageAssistantConfigRepository:
+    def __init__(self, db: SqliteDatabase) -> None:
+        self.db = db
+
+    def _serialize(self, row: sqlite3.Row) -> CharacterImageAssistantConfig:
+        return CharacterImageAssistantConfig(
+            id=row["id"],
+            assistant_code=row["assistant_code"],
+            display_name=row["display_name"],
+            enabled=bool(row["enabled"]),
+            sort_order=row["sort_order"],
+            description=row["description"] or "",
+            protocol=row["protocol"] or "openai",
+            base_url=row["base_url"] or "",
+            api_key=row["api_key"] or "",
+            model=row["model"] or "",
+            system_prompt=row["system_prompt"] or "",
+            is_valid=bool(row["is_valid"]),
+            last_checked_at=row["last_checked_at"],
+            last_error=row["last_error"],
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+        )
+
+    def list_all(self) -> list[CharacterImageAssistantConfig]:
+        with self.db._lock, self.db.connect() as conn:
+            rows = conn.execute("SELECT * FROM character_image_assistants ORDER BY sort_order ASC, display_name ASC").fetchall()
+            return [self._serialize(row) for row in rows]
+
+    def get(self, assistant_code: str) -> CharacterImageAssistantConfig | None:
+        with self.db._lock, self.db.connect() as conn:
+            row = conn.execute("SELECT * FROM character_image_assistants WHERE assistant_code = ?", (assistant_code,)).fetchone()
+            return self._serialize(row) if row else None
+
+    def upsert(self, config: CharacterImageAssistantConfig) -> CharacterImageAssistantConfig:
+        now = _now()
+        with self.db._lock, self.db.connect() as conn:
+            exists = conn.execute(
+                "SELECT id FROM character_image_assistants WHERE assistant_code = ?",
+                (config.assistant_code,),
+            ).fetchone()
+            values = (
+                config.assistant_code,
+                config.display_name,
+                1 if config.enabled else 0,
+                config.sort_order,
+                config.description,
+                config.protocol,
+                config.base_url,
+                config.api_key,
+                config.model,
+                config.system_prompt,
+                1 if config.is_valid else 0,
+                config.last_checked_at or now,
+                config.last_error,
+            )
+            if exists is None:
+                conn.execute(
+                    """
+                    INSERT INTO character_image_assistants (
+                      assistant_code, display_name, enabled, sort_order, description, protocol, base_url,
+                      api_key, model, system_prompt, is_valid, last_checked_at, last_error, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    values + (config.created_at or now, now),
+                )
+            else:
+                conn.execute(
+                    """
+                    UPDATE character_image_assistants
+                    SET display_name = ?, enabled = ?, sort_order = ?, description = ?, protocol = ?, base_url = ?,
+                        api_key = ?, model = ?, system_prompt = ?, is_valid = ?, last_checked_at = ?, last_error = ?, updated_at = ?
+                    WHERE assistant_code = ?
+                    """,
+                    (
+                        config.display_name,
+                        1 if config.enabled else 0,
+                        config.sort_order,
+                        config.description,
+                        config.protocol,
+                        config.base_url,
+                        config.api_key,
+                        config.model,
+                        config.system_prompt,
+                        1 if config.is_valid else 0,
+                        config.last_checked_at or now,
+                        config.last_error,
+                        now,
+                        config.assistant_code,
+                    ),
+                )
+            row = conn.execute(
+                "SELECT * FROM character_image_assistants WHERE assistant_code = ?",
+                (config.assistant_code,),
+            ).fetchone()
+            return self._serialize(row)
+
+    def seed(self, config: CharacterImageAssistantConfig) -> None:
+        current = self.get(config.assistant_code)
+        if current and (current.base_url or current.model or current.api_key):
+            return
+        self.upsert(config)
+
+
 class SqliteAssetRepository:
     TABLES = {
         "visuals": "visual_assets",
+        "frames": "frame_assets",
         "characters": "character_assets",
         "voices": "voice_assets",
         "music": "music_assets",
@@ -460,7 +610,7 @@ class SqliteAssetRepository:
             raise ValueError("name is required")
         if not normalized["path"]:
             raise ValueError("asset file path is required")
-        if asset_type == "visuals":
+        if asset_type in {"visuals", "frames"}:
             normalized["prompt_fragment"] = str(payload.get("prompt_fragment") or "").strip()
             normalized["cover_path"] = str(payload.get("cover_path") or normalized["path"]).strip()
         elif asset_type == "characters":
@@ -482,7 +632,7 @@ class SqliteAssetRepository:
 
     def _columns(self, asset_type: str) -> list[str]:
         common = ["id", "name", "description", "path", "mime_type", "size_bytes", "enabled", "sort_order", "created_at", "updated_at"]
-        if asset_type == "visuals":
+        if asset_type in {"visuals", "frames"}:
             return common[:6] + ["prompt_fragment", "cover_path"] + common[6:]
         if asset_type == "characters":
             return common[:6] + ["prompt_fragment", "image_path", "group_name", "is_public"] + common[6:]
@@ -504,7 +654,7 @@ class SqliteAssetRepository:
             "updated_at": row["updated_at"],
             "public_url": f"{self.public_base_url}/{str(row['path']).lstrip('/')}",
         }
-        if asset_type == "visuals":
+        if asset_type in {"visuals", "frames"}:
             base.update(
                 prompt_fragment=row["prompt_fragment"],
                 cover_path=row["cover_path"],

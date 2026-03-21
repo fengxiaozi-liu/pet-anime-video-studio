@@ -10,6 +10,8 @@ class Scene(BaseModel):
     subtitle: str | None = None
     visual_asset_id: str | None = None
     visual_asset_url: str | None = None
+    opening_frame_url: str | None = None
+    ending_frame_url: str | None = None
     character_ids: list[str] = Field(default_factory=list)
     character_prompt_fragments: list[str] = Field(default_factory=list)
     character_image_urls: list[str] = Field(default_factory=list)
@@ -33,6 +35,10 @@ class Storyboard(BaseModel):
     story_text: str = ""
     visual_asset_id: str | None = None
     visual_style_id: str | None = None
+    opening_frame_asset_id: str | None = None
+    opening_frame_url: str | None = None
+    ending_frame_asset_id: str | None = None
+    ending_frame_url: str | None = None
     style_prompt: str = ""
     character_ids: list[str] = Field(default_factory=list)
     character_image_urls: list[str] = Field(default_factory=list)

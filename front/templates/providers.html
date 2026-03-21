@@ -20,8 +20,9 @@
             <span>←</span> 返回首页
           </a>
           <div class="settings-header__title">
-            <div class="eyebrow">Settings</div>
+            <div class="eyebrow">Workspace Settings</div>
             <h1>配置中心</h1>
+            <p>集中管理视频助手、故事助手、生图助手和素材资源，工作台会直接读取这里的已启用配置。</p>
           </div>
         </div>
         <div class="settings-header__actions">
@@ -34,6 +35,7 @@
         <div class="settings-primary-tabs">
           <button class="settings-primary-tab is-active" data-config-tab="providers" type="button">视频助手</button>
           <button class="settings-primary-tab" data-config-tab="assistants" type="button">故事助手</button>
+          <button class="settings-primary-tab" data-config-tab="character-image-assistants" type="button">生图助手</button>
           <button class="settings-primary-tab" data-config-tab="materials" type="button">素材配置</button>
         </div>
 
@@ -52,6 +54,7 @@
               <div class="settings-content__actions">
                 <button id="providers_refresh" class="btn btn--ghost" type="button">刷新配置</button>
                 <button id="story_assistants_refresh" class="btn btn--ghost" type="button" hidden>刷新助手</button>
+                <button id="character_image_assistants_refresh" class="btn btn--ghost" type="button" hidden>刷新生图助手</button>
                 <button id="materials_refresh" class="btn btn--ghost" type="button" hidden>刷新素材</button>
               </div>
             </div>
