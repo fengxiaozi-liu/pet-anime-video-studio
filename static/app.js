@@ -450,21 +450,101 @@ $("submit").addEventListener("click", async () => {
   }
 });
 
-// --- Loading States & Progress Indicators ---
+// --- Upload progress helper (XHR for upload % tracking) ---
+function uploadWithProgress(fd, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/api/jobs", true);
+    xhr.upload.addEventListener("progress", (e) => {
+      if (e.lengthComputable) {
+        onProgress(Math.round((e.loaded / e.total) * 100), "正在上传图片...");
+      }
+    });
+    xhr.addEventListener("load", () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(xhr);
+      } else {
+        reject(new Error(xhr.responseText || `Upload failed (${xhr.status})`));
+      }
+    });
+    xhr.addEventListener("error", () => reject(new Error("Network error during upload")));
+    xhr.send(fd);
+  });
+}
 
+// --- Generation progress tracking ---
+const _genStageBounds = {
+  preparing:    [0,   5,  "准备中"],
+  rendering_cloud: [5,  75, "云端渲染中"],
+  trying_cloud:    [75, 80, "尝试云端渲染"],
+  rendering_local: [85, 95, "本地渲染中"],
+  fallback_local:  [95, 98, "回退本地渲染"],
+  done:            [100, 100, "完成"],
+};
+
+let _lastStageAt = 0;
+let _lastProgress = 0;
+
+function _stageProgress(stage, elapsedInStage) {
+  const [lo, hi, label] = _genStageBounds[stage] || [0, 0, stage];
+  const span = hi - lo;
+  // Estimate 30s per stage if no external signal
+  const stageTotal = 30000;
+  const pct = span > 0 ? lo + Math.min(span, Math.round((elapsedInStage / stageTotal) * span)) : lo;
+  return { pct: Math.min(pct, hi), label };
+}
+
+function _setGenProgress(stage, elapsed) {
+  const { pct, label } = _stageProgress(stage, elapsed);
+  const fill = document.getElementById("loading_progress_fill");
+  const bar  = document.getElementById("loading_progress_bar");
+  const etaEl = document.getElementById("loading_eta");
+  if (fill) fill.style.width = pct + "%";
+  if (bar)  bar.style.display = "block";
+
+  // ETA: if we know elapsed and pct, estimate total and remaining
+  if (elapsed > 5000 && pct > 1) {
+    const totalEst = (elapsed / pct) * 100;
+    const remaining = Math.max(0, Math.round((totalEst - elapsed) / 1000));
+    if (etaEl) {
+      etaEl.textContent = `预计剩余: ${remaining}s`;
+    }
+  }
+}
+
+function _showUploadProgress(pct, text) {
+  const fill = document.getElementById("loading_progress_fill");
+  const bar  = document.getElementById("loading_progress_bar");
+  const textEl = document.getElementById("loading_text");
+  const etaEl = document.getElementById("loading_eta");
+  if (fill) fill.style.width = pct + "%";
+  if (bar)  bar.style.display = "block";
+  if (textEl) textEl.textContent = text;
+  if (etaEl)  etaEl.textContent = pct < 100 ? `上传中: ${pct}%` : "";
+}
+
+// --- Loading overlay helpers ---
 function setLoading(isLoading, message) {
-  const overlay = document.getElementById('loading_overlay');
-  const textEl = document.getElementById('loading_text');
-  const submitBtn = document.getElementById('submit');
-  
+  const overlay  = document.getElementById("loading_overlay");
+  const textEl   = document.getElementById("loading_text");
+  const bar      = document.getElementById("loading_progress_bar");
+  const fill     = document.getElementById("loading_progress_fill");
+  const etaEl    = document.getElementById("loading_eta");
+  const submitBtn = document.getElementById("submit");
+
   if (!overlay) return;
-  
+
   if (isLoading) {
-    overlay.style.display = 'flex';
-    if (textEl && message) textEl.textContent = message || '处理中...';
+    overlay.style.display = "flex";
+    if (textEl && message) textEl.textContent = message || "处理中...";
+    if (bar)  bar.style.display = "none";
+    if (fill) fill.style.width = "0%";
+    if (etaEl) etaEl.textContent = "";
     if (submitBtn) submitBtn.disabled = true;
   } else {
-    overlay.style.display = 'none';
+    overlay.style.display = "none";
+    if (bar)  bar.style.display = "none";
+    if (etaEl) etaEl.textContent = "";
     if (submitBtn) submitBtn.disabled = false;
   }
 }
