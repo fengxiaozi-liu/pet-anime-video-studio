@@ -32,24 +32,26 @@
 
       <main class="settings-main">
         <div class="settings-primary-tabs">
-          <button class="settings-primary-tab is-active" data-config-tab="providers" type="button">视频提供商</button>
+          <button class="settings-primary-tab is-active" data-config-tab="providers" type="button">视频助手</button>
+          <button class="settings-primary-tab" data-config-tab="assistants" type="button">故事助手</button>
           <button class="settings-primary-tab" data-config-tab="materials" type="button">素材配置</button>
         </div>
 
         <section class="settings-layout">
           <aside class="settings-sidebar">
-            <div class="settings-sidebar__title" id="config_sidebar_title">视频提供商</div>
+            <div class="settings-sidebar__title" id="config_sidebar_title">视频助手</div>
             <nav class="settings-sidebar__nav" id="config_sidebar_nav"></nav>
           </aside>
 
           <section class="settings-content">
             <div class="settings-content__header">
               <div>
-                <h2 id="config_content_title">视频提供商</h2>
-                <p id="config_content_description">管理视频生成厂商的启用状态、鉴权信息与默认请求参数。</p>
+                <h2 id="config_content_title">视频助手</h2>
+                <p id="config_content_description">管理视频生成能力的启用状态、鉴权信息与默认请求参数。</p>
               </div>
               <div class="settings-content__actions">
                 <button id="providers_refresh" class="btn btn--ghost" type="button">刷新配置</button>
+                <button id="story_assistants_refresh" class="btn btn--ghost" type="button" hidden>刷新助手</button>
                 <button id="materials_refresh" class="btn btn--ghost" type="button" hidden>刷新素材</button>
               </div>
             </div>

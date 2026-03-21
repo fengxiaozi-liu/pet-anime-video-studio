@@ -8,7 +8,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from ..domain.models import ProviderConfig, RenderJob, SceneJob
+from ..domain.models import ProviderConfig, RenderJob, SceneJob, StoryAssistantConfig
 
 
 def _now() -> float:
@@ -121,6 +121,25 @@ class SqliteDatabase:
                     created_at REAL NOT NULL,
                     updated_at REAL NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS story_assistants (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    assistant_code TEXT NOT NULL UNIQUE,
+                    display_name TEXT NOT NULL,
+                    enabled INTEGER NOT NULL DEFAULT 0,
+                    sort_order INTEGER NOT NULL DEFAULT 100,
+                    description TEXT,
+                    protocol TEXT NOT NULL DEFAULT 'openai',
+                    base_url TEXT NOT NULL DEFAULT '',
+                    api_key TEXT NOT NULL DEFAULT '',
+                    model TEXT NOT NULL DEFAULT '',
+                    system_prompt TEXT NOT NULL DEFAULT '',
+                    temperature REAL NOT NULL DEFAULT 0.7,
+                    is_valid INTEGER NOT NULL DEFAULT 0,
+                    last_checked_at REAL,
+                    last_error TEXT,
+                    created_at REAL NOT NULL,
+                    updated_at REAL NOT NULL
+                );
                 CREATE TABLE IF NOT EXISTS visual_assets (
                     id TEXT PRIMARY KEY,
                     name TEXT NOT NULL,
@@ -144,6 +163,7 @@ class SqliteDatabase:
                     size_bytes INTEGER NOT NULL DEFAULT 0,
                     prompt_fragment TEXT,
                     image_path TEXT,
+                    group_name TEXT NOT NULL DEFAULT '默认分组',
                     is_public INTEGER NOT NULL DEFAULT 1,
                     enabled INTEGER NOT NULL DEFAULT 1,
                     sort_order INTEGER NOT NULL DEFAULT 100,
@@ -184,6 +204,32 @@ class SqliteDatabase:
                 );
                 """
             )
+            self._ensure_story_assistant_protocol(conn)
+            self._ensure_character_asset_group_name(conn)
+
+    def _ensure_character_asset_group_name(self, conn: sqlite3.Connection) -> None:
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(character_assets)").fetchall()}
+        if "group_name" not in columns:
+            conn.execute("ALTER TABLE character_assets ADD COLUMN group_name TEXT NOT NULL DEFAULT '默认分组'")
+        conn.execute(
+            """
+            UPDATE character_assets
+            SET group_name = '默认分组'
+            WHERE group_name IS NULL OR TRIM(group_name) = ''
+            """
+        )
+
+    def _ensure_story_assistant_protocol(self, conn: sqlite3.Connection) -> None:
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(story_assistants)").fetchall()}
+        if "protocol" not in columns:
+            conn.execute("ALTER TABLE story_assistants ADD COLUMN protocol TEXT NOT NULL DEFAULT 'openai'")
+        conn.execute(
+            """
+            UPDATE story_assistants
+            SET protocol = 'openai'
+            WHERE protocol IS NULL OR TRIM(protocol) = ''
+            """
+        )
 
 
 class SqliteProviderConfigRepository:
@@ -276,6 +322,109 @@ class SqliteProviderConfigRepository:
         self.upsert(config)
 
 
+class SqliteStoryAssistantConfigRepository:
+    def __init__(self, db: SqliteDatabase) -> None:
+        self.db = db
+
+    def _serialize(self, row: sqlite3.Row) -> StoryAssistantConfig:
+        return StoryAssistantConfig(
+            id=row["id"],
+            assistant_code=row["assistant_code"],
+            display_name=row["display_name"],
+            enabled=bool(row["enabled"]),
+            sort_order=row["sort_order"],
+            description=row["description"] or "",
+            protocol=row["protocol"] or "openai",
+            base_url=row["base_url"] or "",
+            api_key=row["api_key"] or "",
+            model=row["model"] or "",
+            system_prompt=row["system_prompt"] or "",
+            temperature=float(row["temperature"] or 0.7),
+            is_valid=bool(row["is_valid"]),
+            last_checked_at=row["last_checked_at"],
+            last_error=row["last_error"],
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+        )
+
+    def list_all(self) -> list[StoryAssistantConfig]:
+        with self.db._lock, self.db.connect() as conn:
+            rows = conn.execute("SELECT * FROM story_assistants ORDER BY sort_order ASC, display_name ASC").fetchall()
+            return [self._serialize(row) for row in rows]
+
+    def get(self, assistant_code: str) -> StoryAssistantConfig | None:
+        with self.db._lock, self.db.connect() as conn:
+            row = conn.execute("SELECT * FROM story_assistants WHERE assistant_code = ?", (assistant_code,)).fetchone()
+            return self._serialize(row) if row else None
+
+    def upsert(self, config: StoryAssistantConfig) -> StoryAssistantConfig:
+        now = _now()
+        with self.db._lock, self.db.connect() as conn:
+            exists = conn.execute("SELECT id FROM story_assistants WHERE assistant_code = ?", (config.assistant_code,)).fetchone()
+            values = (
+                config.assistant_code,
+                config.display_name,
+                1 if config.enabled else 0,
+                config.sort_order,
+                config.description,
+                config.protocol,
+                config.base_url,
+                config.api_key,
+                config.model,
+                config.system_prompt,
+                float(config.temperature),
+                1 if config.is_valid else 0,
+                config.last_checked_at or now,
+                config.last_error,
+            )
+            if exists is None:
+                conn.execute(
+                    """
+                    INSERT INTO story_assistants (
+                      assistant_code, display_name, enabled, sort_order, description, protocol, base_url,
+                      api_key, model, system_prompt, temperature, is_valid, last_checked_at,
+                      last_error, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    values + (config.created_at or now, now),
+                )
+            else:
+                conn.execute(
+                    """
+                    UPDATE story_assistants
+                    SET display_name = ?, enabled = ?, sort_order = ?, description = ?, protocol = ?, base_url = ?,
+                        api_key = ?, model = ?, system_prompt = ?, temperature = ?, is_valid = ?,
+                        last_checked_at = ?, last_error = ?, updated_at = ?
+                    WHERE assistant_code = ?
+                    """,
+                    (
+                        config.display_name,
+                        1 if config.enabled else 0,
+                        config.sort_order,
+                        config.description,
+                        config.protocol,
+                        config.base_url,
+                        config.api_key,
+                        config.model,
+                        config.system_prompt,
+                        float(config.temperature),
+                        1 if config.is_valid else 0,
+                        config.last_checked_at or now,
+                        config.last_error,
+                        now,
+                        config.assistant_code,
+                    ),
+                )
+            row = conn.execute("SELECT * FROM story_assistants WHERE assistant_code = ?", (config.assistant_code,)).fetchone()
+            return self._serialize(row)
+
+    def seed(self, config: StoryAssistantConfig) -> None:
+        current = self.get(config.assistant_code)
+        if current and (current.base_url or current.model or current.api_key):
+            return
+        self.upsert(config)
+
+
 class SqliteAssetRepository:
     TABLES = {
         "visuals": "visual_assets",
@@ -317,6 +466,7 @@ class SqliteAssetRepository:
         elif asset_type == "characters":
             normalized["prompt_fragment"] = str(payload.get("prompt_fragment") or "").strip()
             normalized["image_path"] = str(payload.get("image_path") or normalized["path"]).strip()
+            normalized["group_name"] = str(payload.get("group_name") or "默认分组").strip() or "默认分组"
             normalized["is_public"] = 1 if bool(payload.get("is_public", True)) else 0
         elif asset_type == "voices":
             normalized["tone"] = str(payload.get("tone") or "").strip()
@@ -335,7 +485,7 @@ class SqliteAssetRepository:
         if asset_type == "visuals":
             return common[:6] + ["prompt_fragment", "cover_path"] + common[6:]
         if asset_type == "characters":
-            return common[:6] + ["prompt_fragment", "image_path", "is_public"] + common[6:]
+            return common[:6] + ["prompt_fragment", "image_path", "group_name", "is_public"] + common[6:]
         if asset_type == "voices":
             return common[:6] + ["tone", "audio_path", "sample_rate", "duration_ms"] + common[6:]
         return common[:6] + ["author", "genre_tags", "audio_path", "duration_ms"] + common[6:]
@@ -365,7 +515,7 @@ class SqliteAssetRepository:
                 prompt_fragment=row["prompt_fragment"],
                 image_path=row["image_path"],
                 image_url=f"{self.public_base_url}/{str(row['image_path'] or row['path']).lstrip('/')}",
-                is_public=bool(row["is_public"]),
+                group_name=(row["group_name"] or "默认分组"),
             )
         elif asset_type == "voices":
             base.update(

@@ -17,8 +17,12 @@
       <a class="topbar-back" href="/">
         <span>←</span> 返回
       </a>
+      <div class="topbar-provider topbar-provider--push">
+        <label for="story_assistant_select">故事助手</label>
+        <select id="story_assistant_select"></select>
+      </div>
       <div class="topbar-provider">
-        <label for="studio_provider">提供商</label>
+        <label for="studio_provider">视频助手</label>
         <select id="studio_provider"></select>
       </div>
       <a class="topbar-link" href="/tasks">任务列表</a>
@@ -26,14 +30,6 @@
     <div class="studio-shell">
       <aside class="studio-column studio-column--assistant">
         <div class="studio-panel studio-panel--assistant">
-          <div class="assistant-header">
-            <div>
-              <div class="eyebrow">工作台</div>
-              <h1>成片助手</h1>
-            </div>
-            <a class="assistant-close" href="/" aria-label="返回首页">×</a>
-          </div>
-
           <div class="assistant-thread" id="assistant_thread"></div>
 
           <div class="assistant-plan" id="assistant_plan"></div>
@@ -52,10 +48,6 @@
       <main class="studio-column studio-column--editor">
         <section class="studio-panel studio-panel--editor">
           <div class="editor-header">
-            <div>
-              <div class="eyebrow">故事与分镜视频</div>
-              <h2>策划文档与分镜脚本</h2>
-            </div>
             <div class="status-chip" id="global_status">空闲中</div>
           </div>
 
@@ -83,7 +75,7 @@
 
           <section class="editor-status-panel">
             <div class="editor-status-panel__top">
-              <div class="result-status" id="job_hint">还没有任务。先让助手生成一个故事草稿，再在右侧补齐画面、角色、提供商和音频设置。</div>
+              <div class="result-status" id="job_hint">还没有任务。先让助手生成一个故事草稿，再在右侧补齐画面、角色、视频助手和音频设置。</div>
               <a id="download_result" class="btn btn--ghost is-disabled" href="#" aria-disabled="true">下载结果</a>
             </div>
             <div class="result-meta" id="job_meta"></div>
@@ -104,7 +96,7 @@
           <div class="resource-panel" id="resource_panel"></div>
 
           <div class="resource-footer">
-            <div class="resource-footer__note" id="resource_note">选择画面风格、顶部提供商、角色、配音和音乐后，再提交生成。</div>
+            <div class="resource-footer__note" id="resource_note">选择画面风格、顶部视频助手、角色、配音和音乐后，再提交生成。</div>
             <button id="submit" class="btn btn--dark btn--block">生成视频</button>
           </div>
         </section>

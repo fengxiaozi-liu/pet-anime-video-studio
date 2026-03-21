@@ -14,6 +14,7 @@ class ProviderField:
     required: bool = False
     placeholder: str | None = None
     help_text: str | None = None
+    options: list[dict[str, str]] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -23,6 +24,7 @@ class ProviderField:
             "required": self.required,
             "placeholder": self.placeholder,
             "help_text": self.help_text,
+            "options": self.options,
         }
 
 

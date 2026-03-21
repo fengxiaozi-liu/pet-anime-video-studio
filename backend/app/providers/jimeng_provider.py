@@ -30,7 +30,6 @@ class JimengProvider(BaseProvider):
             ProviderField("app_secret", "App Secret", kind="password", required=True),
             ProviderField("req_key", "Req Key", required=False, placeholder="jimeng_ti2v_v30_pro"),
             ProviderField("base_url", "Base URL", required=False, placeholder="https://visual.volcengineapi.com"),
-            ProviderField("mock_mode", "Mock Mode", kind="checkbox", required=False, help_text="本地模拟即梦异步结果，便于联调。"),
         ]
 
     def validate_config(self, provider_config_json: dict[str, Any]) -> list[str]:
@@ -100,6 +99,20 @@ class JimengProvider(BaseProvider):
                 return candidate
         return None
 
+    def _resolve_reference_image_urls(self, scene: SceneTaskContext) -> list[str]:
+        urls: list[str] = []
+        visual_asset_url = self._resolve_visual_asset_url(scene)
+        if visual_asset_url:
+            urls.append(visual_asset_url)
+        for value in (scene.scene_payload.get("character_image_urls") or scene.storyboard.get("character_image_urls") or []):
+            candidate = str(value or "").strip()
+            if not candidate:
+                continue
+            parsed = urlparse(candidate)
+            if parsed.scheme in {"http", "https"} and parsed.netloc and candidate not in urls:
+                urls.append(candidate)
+        return urls
+
     def create_task(
         self,
         scene: SceneTaskContext,
@@ -121,9 +134,9 @@ class JimengProvider(BaseProvider):
             "frames": frames,
             "aspect_ratio": self._resolve_aspect_ratio(scene),
         }
-        visual_asset_url = self._resolve_visual_asset_url(scene)
-        if visual_asset_url:
-            payload["image_urls"] = [visual_asset_url]
+        reference_image_urls = self._resolve_reference_image_urls(scene)
+        if reference_image_urls:
+            payload["image_urls"] = reference_image_urls
 
         if self._is_mock_mode(provider_config_json):
             task_id = f"jimeng-mock-{uuid.uuid4()}"

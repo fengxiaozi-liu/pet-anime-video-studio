@@ -807,9 +807,14 @@ textarea:focus {
 
 .story-document {
   min-height: 420px;
+  max-height: 70vh;
+  height: 70vh;
   font-size: 16px;
   line-height: 1.8;
   white-space: pre-wrap;
+  resize: none;
+  overflow-y: auto;
+  padding-bottom: 96px;
 }
 
 .overview-card,
@@ -1439,9 +1444,12 @@ textarea:focus {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-left: auto;
   margin-right: 12px;
   padding: 0 6px 0 16px;
+}
+
+.topbar-provider--push {
+  margin-left: auto;
 }
 
 .topbar-provider label {
@@ -2133,6 +2141,67 @@ textarea:focus {
   background: rgba(255,255,255,0.92);
 }
 
+.material-upload-card {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  gap: 18px;
+  padding: 16px;
+  border: 1px solid rgba(72, 52, 33, 0.08);
+  border-radius: 24px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(248, 242, 234, 0.92));
+}
+
+.material-upload-card__preview {
+  min-width: 0;
+}
+
+.material-upload-card__preview .resource-card__media {
+  width: 100%;
+  min-height: 280px;
+  border-radius: 22px;
+  border: 1px solid rgba(72, 52, 33, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.42);
+}
+
+.material-upload-card__body {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 16px;
+  min-width: 0;
+}
+
+.material-upload-card__text strong {
+  display: block;
+  font-size: 16px;
+}
+
+.material-upload-card__text span {
+  display: block;
+  margin-top: 8px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.material-upload-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.material-upload-card__button {
+  position: relative;
+  overflow: hidden;
+}
+
+.material-upload-card__input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
 .provider-card__meta {
   display: flex;
   flex-wrap: wrap;
@@ -2244,5 +2313,13 @@ textarea:focus {
 
   .provider-form {
     grid-template-columns: 1fr;
+  }
+
+  .material-upload-card {
+    grid-template-columns: 1fr;
+  }
+
+  .material-upload-card__preview .resource-card__media {
+    min-height: 220px;
   }
 }

@@ -13,10 +13,10 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from starlette.requests import Request
 
-from .application.services import JobApplicationService, MaterialAssetService, ProviderConfigService
+from .application.services import JobApplicationService, MaterialAssetService, ProviderConfigService, StoryAssistantConfigService
 from .assets import AssetStore
 from .config import get_settings
 from .export_package import generate_export_package
@@ -26,6 +26,7 @@ from .infrastructure.sqlite_repositories import (
     SqliteProviderConfigRepository,
     SqliteRenderJobRepository,
     SqliteSceneJobRepository,
+    SqliteStoryAssistantConfigRepository,
 )
 from .infrastructure.storage import LocalStorageService
 from .pipeline import TaskWorker, run_job
@@ -55,6 +56,7 @@ db = SqliteDatabase(settings.DATABASE_PATH)
 scene_repo = SqliteSceneJobRepository(db)
 render_repo = SqliteRenderJobRepository(db, scene_repo)
 provider_repo = SqliteProviderConfigRepository(db)
+story_assistant_repo = SqliteStoryAssistantConfigRepository(db)
 asset_repo = SqliteAssetRepository(db, settings.STORAGE_PUBLIC_BASE_URL)
 storage_service = LocalStorageService(base_dir=settings.STORAGE_BASE_DIR, public_base_url=settings.STORAGE_PUBLIC_BASE_URL)
 assets = AssetStore(root_dir=UPLOAD_DIR / "assets", index_path=DATA_DIR / "assets.json")
@@ -70,17 +72,49 @@ class ProviderRegistryAdapter:
 
 provider_registry = ProviderRegistryAdapter()
 provider_service = ProviderConfigService(provider_repo, provider_registry, settings)
+story_assistant_service = StoryAssistantConfigService(story_assistant_repo, settings)
 material_service = MaterialAssetService(asset_repo, storage_service)
 job_service = JobApplicationService(render_repo, scene_repo, provider_repo, asset_repo, settings)
 
 
 class ProviderConfigUpdate(BaseModel):
     enabled: bool = False
+    display_name: str | None = None
+    description: str | None = None
+    sort_order: int | None = None
     provider_config_json: dict[str, Any] = {}
 
 
 class ProviderValidateRequest(BaseModel):
     provider_config_json: dict[str, Any] | None = None
+
+
+class StoryAssistantConfigPayload(BaseModel):
+    display_name: str
+    enabled: bool = False
+    sort_order: int = 100
+    description: str = ""
+    protocol: str = "openai"
+    base_url: str = ""
+    api_key: str = ""
+    model: str = ""
+    system_prompt: str = ""
+    temperature: float = 0.7
+
+
+class StoryAssistantGenerateCharacter(BaseModel):
+    name: str
+    description: str = ""
+
+
+class StoryAssistantGenerateRequest(BaseModel):
+    assistant_code: str
+    prompt: str
+    aspect_ratio: str | None = None
+    template_name: str | None = None
+    visual_style_name: str | None = None
+    visual_style_prompt: str | None = None
+    characters: list[StoryAssistantGenerateCharacter] = Field(default_factory=list)
 
 
 async def verify_api_credentials(credentials: HTTPBasicCredentials | None = Depends(security)):
@@ -138,11 +172,17 @@ async def lifespan(app: FastAPI):
         security_manager = SecurityManager(api_keys={}, enabled=False)
 
     provider_service.seed_from_config()
+    story_assistant_service.seed_from_config()
     configured = [item["provider_code"] for item in provider_service.list_available()]
     if configured:
         logger.info("Configured providers: %s", ", ".join(configured))
     else:
         logger.warning("No available providers configured.")
+    assistants = [item["assistant_code"] for item in story_assistant_service.list_available()]
+    if assistants:
+        logger.info("Available story assistants: %s", ", ".join(assistants))
+    else:
+        logger.warning("No available story assistants configured.")
 
     task_worker = TaskWorker(
         render_repo=render_repo,
@@ -225,9 +265,19 @@ def list_available_providers(_user: str = Depends(authenticated_endpoint)) -> di
     return {"providers": provider_service.list_available()}
 
 
+@app.get("/api/story-assistants")
+def list_available_story_assistants(_user: str = Depends(authenticated_endpoint)) -> dict[str, Any]:
+    return {"story_assistants": story_assistant_service.list_available()}
+
+
 @app.get("/api/provider-configs")
 def list_provider_configs(_user: str = Depends(authenticated_endpoint)) -> dict[str, Any]:
     return {"provider_configs": provider_service.list_configs_for_ui()}
+
+
+@app.get("/api/story-assistant-configs")
+def list_story_assistant_configs(_user: str = Depends(authenticated_endpoint)) -> dict[str, Any]:
+    return {"story_assistant_configs": story_assistant_service.list_configs_for_ui()}
 
 
 @app.put("/api/provider-configs/{provider_code}")
@@ -236,10 +286,19 @@ def update_provider_config(
     body: ProviderConfigUpdate,
     _user: str = Depends(authenticated_endpoint),
 ) -> dict[str, Any]:
-    registered = {item["provider_code"] for item in provider_registry.list_registered()}
-    if provider_code not in registered:
-        raise HTTPException(status_code=404, detail="provider not found")
-    return {"provider_config": provider_service.update(provider_code, enabled=body.enabled, provider_config_json=body.provider_config_json)}
+    provider_code = provider_code.strip()
+    if not provider_code:
+        raise HTTPException(status_code=400, detail="provider_code is required")
+    return {
+        "provider_config": provider_service.update(
+            provider_code,
+            enabled=body.enabled,
+            display_name=body.display_name,
+            description=body.description,
+            sort_order=body.sort_order,
+            provider_config_json=body.provider_config_json,
+        )
+    }
 
 
 @app.post("/api/provider-configs/{provider_code}/validate")
@@ -248,13 +307,60 @@ def validate_provider_config(
     body: ProviderValidateRequest,
     _user: str = Depends(authenticated_endpoint),
 ) -> dict[str, Any]:
-    registered = {item["provider_code"] for item in provider_registry.list_registered()}
-    if provider_code not in registered:
-        raise HTTPException(status_code=404, detail="provider not found")
     current = provider_repo.get(provider_code)
     provider_config_json = body.provider_config_json if body.provider_config_json is not None else (current.provider_config_json if current else {})
-    errors = provider_service.validate(provider_code, provider_config_json)
+    try:
+        errors = provider_service.validate(provider_code, provider_config_json)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     return {"ok": not errors, "errors": errors}
+
+
+@app.put("/api/story-assistant-configs/{assistant_code}")
+def update_story_assistant_config(
+    assistant_code: str,
+    body: StoryAssistantConfigPayload,
+    _user: str = Depends(authenticated_endpoint),
+) -> dict[str, Any]:
+    assistant_code = assistant_code.strip()
+    if not assistant_code:
+        raise HTTPException(status_code=400, detail="assistant_code is required")
+    return {"story_assistant_config": story_assistant_service.update(assistant_code, body.model_dump())}
+
+
+@app.post("/api/story-assistant-configs/{assistant_code}/validate")
+def validate_story_assistant_config(
+    assistant_code: str,
+    body: StoryAssistantConfigPayload,
+    _user: str = Depends(authenticated_endpoint),
+) -> dict[str, Any]:
+    errors = story_assistant_service.validate(body.model_dump())
+    return {"ok": not errors, "errors": errors, "assistant_code": assistant_code}
+
+
+@app.post("/api/story-assistants/generate")
+def generate_story_assistant_draft(
+    body: StoryAssistantGenerateRequest,
+    _user: str = Depends(authenticated_endpoint),
+) -> dict[str, Any]:
+    prompt = body.prompt.strip()
+    if not prompt:
+        raise HTTPException(status_code=400, detail="prompt is required")
+    try:
+        draft = story_assistant_service.generate(
+            body.assistant_code,
+            prompt=prompt,
+            aspect_ratio=body.aspect_ratio,
+            template_name=body.template_name,
+            visual_style_name=body.visual_style_name,
+            visual_style_prompt=body.visual_style_prompt,
+            characters=[item.model_dump() for item in body.characters],
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"故事助手生成失败: {exc}") from exc
+    return draft
 
 
 @app.get("/api/platform-templates")

@@ -22,8 +22,9 @@ const state = {
   subtitles: true,
   bgmVolume: 0.25,
   provider: "",
+  storyAssistantCode: "",
   activeTab: "visual",
-  characterScope: "public",
+  characterGroup: "",
   voiceFilter: "热门",
   musicFilter: "推荐音乐",
   searches: {
@@ -37,7 +38,9 @@ const state = {
 };
 
 let availableProviders = [];
+let availableStoryAssistants = [];
 let providerConfigs = [];
+let storyAssistantConfigs = [];
 let materialConfigs = { visuals: [], characters: [], voices: [], music: [] };
 let platformTemplates = [];
 let pollingTimer = null;
@@ -45,6 +48,11 @@ let activeMaterialConfigTab = "visuals";
 let activeConfigTab = "providers";
 let activeConfigSection = "jimeng";
 const pendingMaterialDrafts = { visuals: [], characters: [], voices: [], music: [] };
+const pendingStoryAssistantDrafts = [];
+const pendingCustomProviderDrafts = [];
+const materialUploadFiles = new Map();
+const materialPreviewUrls = new Map();
+const materialUploadNames = new Map();
 
 function page() {
   return document.body.dataset.page || "";
@@ -102,6 +110,50 @@ function selectedProvider() {
 
 function charactersByIds(ids) {
   return materialsOf("characters").filter((item) => ids.includes(item.id));
+}
+
+function materialDraftKey(type, id) {
+  return `${type}:${id}`;
+}
+
+function fileNameLabel(name = "") {
+  if (!name) return "尚未选择文件";
+  return name.length > 28 ? `${name.slice(0, 25)}...` : name;
+}
+
+function revokeMaterialPreview(key) {
+  const current = materialPreviewUrls.get(key);
+  if (current) URL.revokeObjectURL(current);
+  materialPreviewUrls.delete(key);
+}
+
+function clearMaterialUploadState(key) {
+  materialUploadFiles.delete(key);
+  materialUploadNames.delete(key);
+  revokeMaterialPreview(key);
+}
+
+function setMaterialUploadState(key, file) {
+  clearMaterialUploadState(key);
+  if (!file) return;
+  materialUploadFiles.set(key, file);
+  materialUploadNames.set(key, file.name || "");
+  if (file.type.startsWith("image/")) {
+    materialPreviewUrls.set(key, URL.createObjectURL(file));
+  }
+}
+
+function uploadedMaterialFile(key) {
+  return materialUploadFiles.get(key) || null;
+}
+
+function uploadedMaterialFileName(key) {
+  return materialUploadNames.get(key) || "";
+}
+
+function characterGroups() {
+  const groups = [...new Set(materialsOf("characters").map((item) => item.group_name || "默认分组").filter(Boolean))];
+  return groups.length ? groups : ["默认分组"];
 }
 
 function inferAspectRatio(width, height) {
@@ -205,6 +257,16 @@ async function fetchProviderConfigs() {
   return data.provider_configs || [];
 }
 
+async function fetchStoryAssistants() {
+  const data = await fetchJson("/api/story-assistants", { cache: "no-store" });
+  return data.story_assistants || [];
+}
+
+async function fetchStoryAssistantConfigs() {
+  const data = await fetchJson("/api/story-assistant-configs", { cache: "no-store" });
+  return data.story_assistant_configs || [];
+}
+
 async function fetchMaterials() {
   const data = await fetchJson("/api/materials", { cache: "no-store" });
   return {
@@ -262,6 +324,30 @@ async function validateProviderConfig(providerCode, providerConfigJson) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ provider_config_json: providerConfigJson }),
+  });
+}
+
+async function updateStoryAssistantConfig(assistantCode, payload) {
+  return fetchJson(`/api/story-assistant-configs/${assistantCode}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+async function validateStoryAssistantConfig(assistantCode, payload) {
+  return fetchJson(`/api/story-assistant-configs/${assistantCode}/validate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+async function generateStoryDraft(payload) {
+  return fetchJson("/api/story-assistants/generate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
   });
 }
 
@@ -420,6 +506,10 @@ function documentSummary(text) {
 function renderAssistantThread() {
   const thread = $("assistant_thread");
   if (!thread) return;
+  if (!availableStoryAssistants.length) {
+    thread.innerHTML = '<div class="chat-bubble chat-bubble--assistant">暂无可用故事助手。请先到配置中心完成模型 URL、API Key 和 Model 配置。</div>';
+    return;
+  }
   if (!state.assistantPrompt) {
     thread.innerHTML = '<div class="chat-bubble chat-bubble--assistant">Hi，今天想做什么视频？把主题、情绪、角色关系或者镜头氛围告诉我，我会先给你一版故事和分镜草稿。</div>';
     return;
@@ -433,13 +523,8 @@ function renderAssistantThread() {
 function renderAssistantPlan() {
   const plan = $("assistant_plan");
   if (!plan) return;
-  if (!state.storySummary) {
-    plan.innerHTML = `
-      <div class="assistant-card">
-        <h3>等待生成策划案</h3>
-        <div class="assistant-card__summary">先输入一个主题，我会生成内容概览、故事文本和 4 段可编辑分镜草稿。</div>
-      </div>
-    `;
+  if (!availableStoryAssistants.length || !state.storySummary) {
+    plan.innerHTML = "";
     return;
   }
   plan.innerHTML = `
@@ -451,8 +536,32 @@ function renderAssistantPlan() {
   `;
 }
 
+function renderStoryAssistantSelect() {
+  const select = $("story_assistant_select");
+  const button = $("assistant_generate");
+  if (!select || !button) return;
+  if (!availableStoryAssistants.length) {
+    select.innerHTML = '<option value="">暂无可用故事助手</option>';
+    select.disabled = true;
+    state.storyAssistantCode = "";
+    button.disabled = true;
+    button.textContent = "请先配置故事助手";
+    return;
+  }
+  select.disabled = false;
+  select.innerHTML = availableStoryAssistants.map((item) => `<option value="${item.assistant_code}">${item.display_name}</option>`).join("");
+  if (!state.storyAssistantCode || !availableStoryAssistants.some((item) => item.assistant_code === state.storyAssistantCode)) {
+    state.storyAssistantCode = availableStoryAssistants[0].assistant_code;
+  }
+  select.value = state.storyAssistantCode;
+  button.disabled = false;
+  button.textContent = "生成故事与分镜";
+}
+
 function renderStoryEditors() {
-  if ($("story_document")) $("story_document").value = state.storyText;
+  const node = $("story_document");
+  if (!node) return;
+  node.value = state.storyText;
 }
 
 function renderSceneSummary() {
@@ -516,7 +625,7 @@ function renderProviderSelect() {
   const select = $("studio_provider");
   if (!select) return;
   if (!availableProviders.length) {
-    select.innerHTML = '<option value="">暂无可用 Provider</option>';
+    select.innerHTML = '<option value="">暂无可用视频助手</option>';
     state.provider = "";
     return;
   }
@@ -533,7 +642,7 @@ function renderResourceNote() {
   const voice = selectedVoice();
   const music = selectedMusic();
   const provider = selectedProvider();
-  note.textContent = `已选画风：${styleById(state.visualStyleId)?.name || "未选"}；角色：${state.characterIds.length} 个；提供商：${provider ? provider.display_name : "未配置"}；配音：${voice ? voice.name : "未选"}；音乐：${music ? music.name : "未选"}。`;
+  note.textContent = `已选画风：${styleById(state.visualStyleId)?.name || "未选"}；角色：${state.characterIds.length} 个；视频助手：${provider ? provider.display_name : "未配置"}；配音：${voice ? voice.name : "未选"}；音乐：${music ? music.name : "未选"}。`;
 }
 
 function renderVisualTab() {
@@ -579,15 +688,21 @@ function renderVisualTab() {
 }
 
 function renderCharacterTab() {
-  const scopeList = materialsOf("characters").filter((item) => Boolean(item.is_public) === (state.characterScope === "public"));
+  const groups = characterGroups();
+  if (!groups.includes(state.characterGroup)) {
+    state.characterGroup = groups[0] || "默认分组";
+  }
   const query = state.searches.character.trim().toLowerCase();
-  const list = scopeList.filter((item) => !query || `${item.name}${item.description || ""}`.toLowerCase().includes(query));
+  const list = materialsOf("characters")
+    .filter((item) => (item.group_name || "默认分组") === state.characterGroup)
+    .filter((item) => !query || `${item.name}${item.description || ""}`.toLowerCase().includes(query));
   return `
     <div class="panel-section">
       <h3>角色选择列表</h3>
       <div class="segment-control">
-        <button class="${state.characterScope === "public" ? "is-active" : ""}" data-character-scope="public">公共角色</button>
-        <button class="${state.characterScope === "mine" ? "is-active" : ""}" data-character-scope="mine">我的角色</button>
+        ${groups.map((group) => `
+          <button class="${state.characterGroup === group ? "is-active" : ""}" data-character-group="${group}">${group}</button>
+        `).join("")}
       </div>
     </div>
     <div class="panel-section">
@@ -595,7 +710,7 @@ function renderCharacterTab() {
     </div>
     <div class="panel-section">
       <div class="character-grid">
-        ${list.map((item) => `
+        ${list.length ? list.map((item) => `
           <article class="character-card ${state.characterIds.includes(item.id) ? "is-selected" : ""}" data-character-id="${item.id}">
             <div class="character-card__media character-card__media--image">
               ${item.image_url || item.public_url ? `<img src="${item.image_url || item.public_url}" alt="${item.name}" loading="lazy" />` : '<div class="character-card__placeholder">无预览</div>'}
@@ -603,7 +718,7 @@ function renderCharacterTab() {
             <strong>${item.name}</strong>
             <span>${item.description || ""}</span>
           </article>
-        `).join("")}
+        `).join("") : '<div class="tasks-empty"><h3>该分组暂无角色</h3><p>先去配置中心为这个分组创建角色素材。</p></div>'}
       </div>
     </div>
   `;
@@ -683,6 +798,7 @@ function renderResourcePanel() {
 function renderAll() {
   renderAssistantThread();
   renderAssistantPlan();
+  renderStoryAssistantSelect();
   renderStoryEditors();
   renderSceneList();
   renderProviderSelect();
@@ -696,19 +812,61 @@ function log(msg) {
   el.scrollTop = el.scrollHeight;
 }
 
-function generateDraft() {
+async function generateDraft() {
+  if (!availableStoryAssistants.length || !state.storyAssistantCode) {
+    window.alert("请先在配置中心配置可用的故事助手。");
+    return;
+  }
   const prompt = $("assistant_prompt")?.value.trim() || "";
   if (!prompt) {
     window.alert("先输入你想创作的视频主题。");
     return;
   }
-  state.assistantPrompt = prompt;
-  const draft = buildDraftFromPrompt(prompt);
-  state.storySummary = draft.summary;
-  state.storyText = draft.storyText;
-  state.scenes = draft.scenes;
-  state.activeSceneIndex = 0;
-  renderAll();
+  const button = $("assistant_generate");
+  if (button) {
+    button.disabled = true;
+    button.textContent = "生成中...";
+  }
+  setGlobalStatus("故事生成中", "running");
+  if ($("job_hint")) $("job_hint").textContent = "正在调用故事助手生成策划与分镜草稿...";
+  try {
+    const style = styleById(state.visualStyleId);
+    const draft = await generateStoryDraft({
+      assistant_code: state.storyAssistantCode,
+      prompt,
+      aspect_ratio: state.aspectRatio || null,
+      template_name: platformTemplates.find((item) => item.id === state.templateId)?.name || null,
+      visual_style_name: style?.name || null,
+      visual_style_prompt: style?.prompt_fragment || null,
+      characters: charactersByIds(state.characterIds).map((item) => ({
+        name: item.name,
+        description: item.description || "",
+      })),
+    });
+    state.assistantPrompt = prompt;
+    state.storySummary = draft.story_summary;
+    state.storyText = draft.story_text;
+    state.scenes = (draft.scenes || []).map((scene) => ({
+      title: scene.title || "",
+      prompt: scene.prompt || "",
+      subtitle: scene.subtitle || "",
+      duration_s: Number(scene.duration_s || 4),
+      characterIds: [...state.characterIds],
+    }));
+    state.activeSceneIndex = 0;
+    setGlobalStatus("故事草稿已生成", "done");
+    if ($("job_hint")) $("job_hint").textContent = "故事与分镜草稿已生成，可继续调整正文、分镜和右侧素材。";
+    renderAll();
+  } catch (error) {
+    setGlobalStatus("故事生成失败", "error");
+    if ($("job_hint")) $("job_hint").textContent = `故事生成失败：${error.message}`;
+    window.alert(`故事生成失败：${error.message}`);
+  } finally {
+    if (button) {
+      button.disabled = !availableStoryAssistants.length;
+      button.textContent = availableStoryAssistants.length ? "生成故事与分镜" : "请先配置故事助手";
+    }
+  }
 }
 
 function addScene() {
@@ -850,7 +1008,7 @@ async function submitJob() {
   state.storyText = $("story_document")?.value || state.storyText;
   state.storySummary = documentSummary(state.storyText);
   if (!state.provider) {
-    window.alert("当前没有可用 Provider。");
+    window.alert("当前没有可用视频助手。");
     return;
   }
   if (!state.scenes.length) {
@@ -894,11 +1052,15 @@ function syncMaterialSelections() {
   const characters = materialsOf("characters");
   const voices = materialsOf("voices");
   const music = materialsOf("music");
+  const groups = [...new Set(characters.map((item) => item.group_name || "默认分组").filter(Boolean))];
 
   if (!state.visualStyleId || !visuals.some((item) => item.id === state.visualStyleId)) {
     state.visualStyleId = visuals[0]?.id || "";
   }
   state.characterIds = state.characterIds.filter((id) => characters.some((item) => item.id === id));
+  if (!groups.includes(state.characterGroup)) {
+    state.characterGroup = groups[0] || "默认分组";
+  }
   if (!state.voiceId || !voices.some((item) => item.id === state.voiceId)) {
     state.voiceId = voices[0]?.id || "";
   }
@@ -921,7 +1083,7 @@ function attachStudioEvents() {
 
   document.addEventListener("click", (event) => {
     if (!pageIsStudio()) return;
-    const target = event.target.closest("[data-tab], [data-style-id], [data-character-id], [data-character-scope], [data-voice-id], [data-music-id], [data-voice-filter], [data-music-filter], [data-action], .scene-card");
+    const target = event.target.closest("[data-tab], [data-style-id], [data-character-id], [data-character-group], [data-voice-id], [data-music-id], [data-voice-filter], [data-music-filter], [data-action], .scene-card");
     if (!target) return;
     if (target.dataset.tab) {
       state.activeTab = target.dataset.tab;
@@ -933,8 +1095,8 @@ function attachStudioEvents() {
       renderAll();
       return;
     }
-    if (target.dataset.characterScope) {
-      state.characterScope = target.dataset.characterScope;
+    if (target.dataset.characterGroup) {
+      state.characterGroup = target.dataset.characterGroup;
       renderResourcePanel();
       return;
     }
@@ -1015,6 +1177,9 @@ function attachStudioEvents() {
       state.provider = event.target.value;
       renderResourceNote();
     }
+    if (event.target.id === "story_assistant_select") {
+      state.storyAssistantCode = event.target.value;
+    }
     if (event.target.id === "aspect_ratio") {
       state.aspectRatio = event.target.value;
     }
@@ -1037,20 +1202,23 @@ async function initStudio() {
   try {
     const materials = await fetchMaterials();
     Object.assign(materialLibrary, materials);
-    [platformTemplates, availableProviders, providerConfigs] = await Promise.all([
+    [platformTemplates, availableProviders, providerConfigs, availableStoryAssistants] = await Promise.all([
       fetchPlatformTemplates(),
       fetchProviders(),
       fetchProviderConfigs(),
+      fetchStoryAssistants(),
     ]);
     state.templateId = platformTemplates[0]?.id || "";
     applyTemplateDefaults();
     state.provider = availableProviders[0]?.provider_code || "";
+    state.storyAssistantCode = availableStoryAssistants[0]?.assistant_code || "";
+    state.characterGroup = characterGroups()[0] || "默认分组";
     syncMaterialSelections();
     renderAll();
     attachStudioEvents();
     if (!availableProviders.length) {
-      setGlobalStatus("暂无可用 Provider", "error");
-      if ($("job_hint")) $("job_hint").textContent = "当前没有已启用且校验通过的 Provider。";
+      setGlobalStatus("暂无可用视频助手", "error");
+      if ($("job_hint")) $("job_hint").textContent = "当前没有已启用且校验通过的视频助手。";
     } else {
       setGlobalStatus("空闲中", "idle");
     }
@@ -1094,7 +1262,7 @@ function renderTasksList(jobs) {
           <strong>${job.prompt || "未填写提示词"}</strong>
           <p>${job.status_text || job.stage || "暂无状态说明"}</p>
           <div class="task-card__meta">
-            <span>${job.provider_code || "未指定提供商"}</span>
+            <span>${job.provider_code || "未指定视频助手"}</span>
             <span>${job.template_name || "未指定模板"}</span>
             <span>分镜 ${job.scene_count || 0}</span>
             <span>成功 ${counts.succeeded || 0}</span>
@@ -1152,9 +1320,9 @@ function renderTaskScenes(job) {
         </div>
         <p>${payload.prompt || "未记录分镜描述"}</p>
         <div class="task-card__meta">
-          <span>Provider：${scene.provider_code}</span>
-          <span>厂商任务：${scene.provider_task_id || "未提交"}</span>
-          <span>厂商状态：${scene.provider_status || "未记录"}</span>
+          <span>视频助手：${scene.provider_code}</span>
+          <span>平台任务：${scene.provider_task_id || "未提交"}</span>
+          <span>平台状态：${scene.provider_status || "未记录"}</span>
           <span>轮询次数：${scene.poll_attempts || 0}</span>
         </div>
         ${scene.result_video_url ? `<a class="btn btn--ghost" href="${scene.result_video_url}" target="_blank" rel="noreferrer">查看分镜结果</a>` : ""}
@@ -1178,7 +1346,7 @@ function renderTaskDetail(job) {
     $("task_meta_grid").innerHTML = [
       taskMetric("状态", statusLabel(job.status)),
       taskMetric("阶段", job.stage || "未记录"),
-      taskMetric("提供商", job.provider_code || "未记录"),
+      taskMetric("视频助手", job.provider_code || "未记录"),
       taskMetric("模板", job.template_name || "未记录"),
       taskMetric("分镜数", String(job.scene_count || 0)),
       taskMetric("时长", storyboard.duration_s ? `${storyboard.duration_s}s` : "未记录"),
@@ -1284,28 +1452,129 @@ function providerFieldValue(config, field) {
   return value ?? "";
 }
 
+function providerDraft() {
+  const draftId = globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2, 10);
+  return {
+    provider_code: `custom:${draftId}`,
+    display_name: "未命名视频助手",
+    enabled: false,
+    sort_order: 100,
+    description: "",
+    config_version: 1,
+    provider_config_json: { protocol: "openai", base_url: "", api_key: "", model: "" },
+    is_valid: false,
+    last_checked_at: null,
+    last_error: "",
+    capabilities: { supports_async_tasks: true, supports_scene_video: true },
+    config_fields: [
+      {
+        key: "protocol",
+        label: "协议类型",
+        kind: "select",
+        required: true,
+        options: [
+          { label: "OpenAI", value: "openai" },
+          { label: "Anthropic", value: "anthropic" },
+        ],
+      },
+      { key: "base_url", label: "URL", kind: "text", required: true, placeholder: "https://example.com/generate" },
+      { key: "api_key", label: "API Key", kind: "password", required: true, placeholder: "" },
+      { key: "model", label: "Model", kind: "text", required: true, placeholder: "video-model-v1" },
+    ],
+    is_custom: true,
+    __draft: true,
+  };
+}
+
 function renderProviderConfigCard(config) {
   const fields = config.config_fields || [];
   const credentials = fields.filter((field) => field.key === "app_key" || field.key === "app_secret");
   const requestFields = fields.filter((field) => field.key === "req_key" || field.key === "base_url");
-  const modeFields = fields.filter((field) => field.key === "mock_mode");
-  const statusText = config.is_valid ? "当前配置已校验，可作为工作区可选的视频提供商。" : (config.last_error || "当前配置尚未通过校验。");
+  const statusText = config.is_valid ? "当前配置已校验，可作为工作区可选的视频助手。" : (config.last_error || "当前配置尚未通过校验。");
   const renderField = (field) => `
     <label class="provider-field">
       <span>${field.label}</span>
       ${field.kind === "checkbox"
         ? `<input type="checkbox" data-provider-field="${config.provider_code}:${field.key}" ${providerFieldValue(config, field) ? "checked" : ""} />`
-        : `<input type="${field.kind === "password" ? "password" : "text"}" data-provider-field="${config.provider_code}:${field.key}" value="${providerFieldValue(config, field)}" placeholder="${field.placeholder || ""}" ${field.required ? "required" : ""} />`}
+        : field.kind === "select"
+          ? `<select data-provider-field="${config.provider_code}:${field.key}">${(field.options || []).map((option) => `<option value="${option.value}" ${String(providerFieldValue(config, field)) === String(option.value) ? "selected" : ""}>${option.label}</option>`).join("")}</select>`
+          : `<input type="${field.kind === "password" ? "password" : "text"}" data-provider-field="${config.provider_code}:${field.key}" value="${providerFieldValue(config, field)}" placeholder="${field.placeholder || ""}" ${field.required ? "required" : ""} />`}
       ${field.help_text ? `<small>${field.help_text}</small>` : ""}
     </label>
   `;
+  if (config.is_custom) {
+    return `
+      <article class="provider-card provider-card--jimeng" data-provider-code="${config.provider_code}">
+        <div class="provider-card__head">
+          <div class="provider-card__title">
+            <div class="provider-card__badge">自定义视频助手</div>
+            <h3>${config.display_name || "未命名视频助手"}</h3>
+            <p>${config.description || "通过自定义 URL / API Key / Model 调用外部视频生成服务。"}</p>
+          </div>
+          <div class="provider-card__status">
+            <span class="task-card__badge task-card__badge--${config.is_valid ? "done" : "error"}">${config.is_valid ? "已校验" : "待配置"}</span>
+            <span class="provider-card__status-text">${statusText}</span>
+          </div>
+        </div>
+        <div class="provider-card__surface">
+          <div class="provider-card__row">
+            <label class="setting-toggle provider-card__toggle">
+              <input type="checkbox" data-provider-toggle="${config.provider_code}" ${config.enabled ? "checked" : ""} />
+              <span>启用为工作区可选视频助手</span>
+            </label>
+            <div class="provider-card__meta">
+              <span>助手标识：${config.provider_code}</span>
+              <span>最近校验：${parseDate(config.last_checked_at)}</span>
+            </div>
+          </div>
+
+          <section class="provider-section">
+            <div class="provider-section__head">
+              <strong>基础信息</strong>
+              <span>用于区分不同自定义视频助手。</span>
+            </div>
+            <div class="provider-form provider-form--two-col">
+              <label class="provider-field">
+                <span>名称</span>
+                <input type="text" data-provider-meta="${config.provider_code}:display_name" value="${config.display_name || ""}" />
+              </label>
+              <label class="provider-field">
+                <span>排序</span>
+                <input type="number" data-provider-meta="${config.provider_code}:sort_order" value="${config.sort_order ?? 100}" />
+              </label>
+              <label class="provider-field provider-field--full">
+                <span>描述</span>
+                <input type="text" data-provider-meta="${config.provider_code}:description" value="${config.description || ""}" />
+              </label>
+            </div>
+          </section>
+
+          <section class="provider-section">
+            <div class="provider-section__head">
+              <strong>模型连接</strong>
+              <span>接口需同步返回 JSON，至少包含 video_url 字段。</span>
+            </div>
+            <div class="provider-form provider-form--two-col">
+              ${fields.map(renderField).join("")}
+            </div>
+          </section>
+        </div>
+
+        <div class="provider-card__actions">
+          <button class="btn btn--ghost" type="button" data-provider-validate="${config.provider_code}">校验配置</button>
+          <button class="btn btn--primary" type="button" data-provider-save="${config.provider_code}">保存配置</button>
+        </div>
+        <p class="provider-card__error" id="provider_error_${config.provider_code}">${config.last_error || ""}</p>
+      </article>
+    `;
+  }
   return `
     <article class="provider-card provider-card--jimeng" data-provider-code="${config.provider_code}">
       <div class="provider-card__head">
         <div class="provider-card__title">
-          <div class="provider-card__badge">视频提供商</div>
+          <div class="provider-card__badge">视频助手</div>
           <h3>${config.display_name}</h3>
-          <p>${config.description || "管理该视频提供商的凭证、默认请求参数与启用状态。"}</p>
+          <p>${config.description || "管理该视频助手的凭证、默认请求参数与启用状态。"}</p>
         </div>
         <div class="provider-card__status">
           <span class="task-card__badge task-card__badge--${config.is_valid ? "done" : "error"}">${config.is_valid ? "已校验" : "待配置"}</span>
@@ -1317,10 +1586,10 @@ function renderProviderConfigCard(config) {
         <div class="provider-card__row">
           <label class="setting-toggle provider-card__toggle">
             <input type="checkbox" data-provider-toggle="${config.provider_code}" ${config.enabled ? "checked" : ""} />
-            <span>启用为工作区可选视频提供商</span>
+            <span>启用为工作区可选视频助手</span>
           </label>
           <div class="provider-card__meta">
-            <span>Provider Code：${config.provider_code}</span>
+            <span>助手标识：${config.provider_code}</span>
             <span>最近校验：${parseDate(config.last_checked_at)}</span>
           </div>
         </div>
@@ -1328,7 +1597,7 @@ function renderProviderConfigCard(config) {
         <section class="provider-section">
           <div class="provider-section__head">
             <strong>基础凭证</strong>
-            <span>用于保存该视频提供商的账号鉴权信息</span>
+            <span>用于保存该视频助手的账号鉴权信息</span>
           </div>
           <div class="provider-form provider-form--two-col">
             ${credentials.map(renderField).join("")}
@@ -1342,16 +1611,6 @@ function renderProviderConfigCard(config) {
           </div>
           <div class="provider-form provider-form--two-col">
             ${requestFields.map(renderField).join("")}
-          </div>
-        </section>
-
-        <section class="provider-section">
-          <div class="provider-section__head">
-            <strong>开发模式</strong>
-            <span>仅用于本地联调，不建议在真实环境启用</span>
-          </div>
-          <div class="provider-form provider-form--single">
-            ${modeFields.map(renderField).join("")}
           </div>
         </section>
       </div>
@@ -1372,12 +1631,195 @@ function renderProvidersPage() {
     list.innerHTML = "";
     return;
   }
-  const visibleConfigs = providerConfigs.filter((item) => item.provider_code === activeConfigSection);
+  const visibleConfigs = [...pendingCustomProviderDrafts, ...providerConfigs].filter((item) => item.provider_code === activeConfigSection);
   if (!visibleConfigs.length) {
-    list.innerHTML = '<div class="tasks-empty"><h3>暂无 Provider 定义</h3><p>后端未返回任何 Provider 配置项。</p></div>';
+    list.innerHTML = `
+      <div class="tasks-board__head tasks-board__head--compact">
+        <div>
+          <strong>视频助手</strong>
+          <p>管理内置视频助手与自定义视频生成服务。</p>
+        </div>
+        <button class="btn btn--primary" type="button" data-provider-create="true">新增</button>
+      </div>
+      <div class="tasks-empty"><h3>暂无视频助手定义</h3><p>点击新增，创建一个自定义视频助手。</p></div>
+    `;
     return;
   }
-  list.innerHTML = visibleConfigs.map(renderProviderConfigCard).join("");
+  list.innerHTML = `
+    <div class="tasks-board__head tasks-board__head--compact">
+      <div>
+        <strong>视频助手</strong>
+        <p>管理内置视频助手与自定义视频生成服务。</p>
+      </div>
+      <button class="btn btn--primary" type="button" data-provider-create="true">新增</button>
+    </div>
+    ${visibleConfigs.map(renderProviderConfigCard).join("")}
+  `;
+}
+
+function storyAssistantDraft() {
+  const draftId = globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2, 10);
+  return {
+    id: `draft-story-assistant-${draftId}`,
+    assistant_code: "",
+    display_name: "未命名故事助手",
+    enabled: false,
+    sort_order: 100,
+    description: "",
+    protocol: "openai",
+    base_url: "",
+    api_key: "",
+    model: "",
+    system_prompt: "",
+    temperature: 0.7,
+    is_valid: false,
+    last_checked_at: null,
+    last_error: "",
+    __draft: true,
+  };
+}
+
+function renderStoryAssistantCard(config) {
+  const prefix = config.__draft ? config.id : config.assistant_code;
+  return `
+    <article class="provider-card" data-story-assistant-code="${prefix}">
+      <div class="provider-card__head">
+        <div class="provider-card__title">
+          <div class="provider-card__badge">故事助手</div>
+          <h3>${config.display_name || "未命名故事助手"}</h3>
+          <p>${config.description || "负责生成故事概览、策划正文与分镜草稿，支持 OpenAI 或 Anthropic 协议。"}</p>
+        </div>
+        <div class="provider-card__status">
+          <span class="task-card__badge task-card__badge--${config.is_valid ? "done" : "error"}">${config.is_valid ? "已校验" : "待配置"}</span>
+          <span class="provider-card__status-text">${config.last_error || "配置完成后可在工作台中选择这个故事助手。"}</span>
+        </div>
+      </div>
+      <div class="provider-card__surface">
+        <div class="provider-card__row">
+          <label class="setting-toggle provider-card__toggle">
+            <input type="checkbox" data-story-assistant-field="${prefix}:enabled" ${config.enabled ? "checked" : ""} />
+            <span>启用为工作台可选故事助手</span>
+          </label>
+          <div class="provider-card__meta">
+            <span>Assistant Code：${config.assistant_code || "待填写"}</span>
+            <span>最近校验：${parseDate(config.last_checked_at)}</span>
+          </div>
+        </div>
+
+        <section class="provider-section">
+          <div class="provider-section__head">
+            <strong>基础信息</strong>
+            <span>用于区分不同故事助手与排序。</span>
+          </div>
+          <div class="provider-form provider-form--two-col">
+            <label class="provider-field">
+              <span>助手标识</span>
+              <input type="text" data-story-assistant-field="${prefix}:assistant_code" value="${config.assistant_code || ""}" placeholder="例如：openai-story" ${config.__draft ? "" : "readonly"} />
+            </label>
+            <label class="provider-field">
+              <span>名称</span>
+              <input type="text" data-story-assistant-field="${prefix}:display_name" value="${config.display_name || ""}" />
+            </label>
+            <label class="provider-field">
+              <span>描述</span>
+              <input type="text" data-story-assistant-field="${prefix}:description" value="${config.description || ""}" />
+            </label>
+            <label class="provider-field">
+              <span>排序</span>
+              <input type="number" data-story-assistant-field="${prefix}:sort_order" value="${config.sort_order ?? 100}" />
+            </label>
+            <label class="provider-field">
+              <span>协议</span>
+              <select data-story-assistant-field="${prefix}:protocol">
+                <option value="openai" ${((config.protocol || "openai") === "openai") ? "selected" : ""}>OpenAI</option>
+                <option value="anthropic" ${((config.protocol || "openai") === "anthropic") ? "selected" : ""}>Anthropic</option>
+              </select>
+            </label>
+          </div>
+        </section>
+
+        <section class="provider-section">
+          <div class="provider-section__head">
+            <strong>模型连接</strong>
+            <span>按所选协议填写 Base URL、API Key 和模型名。Anthropic 使用 Messages API。</span>
+          </div>
+          <div class="provider-form provider-form--two-col">
+            <label class="provider-field">
+              <span>Base URL</span>
+              <input type="text" data-story-assistant-field="${prefix}:base_url" value="${config.base_url || ""}" placeholder="${(config.protocol || "openai") === "anthropic" ? "https://api.anthropic.com/v1" : "https://api.openai.com/v1"}" />
+            </label>
+            <label class="provider-field">
+              <span>Model</span>
+              <input type="text" data-story-assistant-field="${prefix}:model" value="${config.model || ""}" placeholder="${(config.protocol || "openai") === "anthropic" ? "claude-sonnet-4-5" : "gpt-4o-mini"}" />
+            </label>
+            <label class="provider-field">
+              <span>API Key</span>
+              <input type="password" data-story-assistant-field="${prefix}:api_key" value="${config.api_key || ""}" />
+            </label>
+            <label class="provider-field">
+              <span>Temperature</span>
+              <input type="number" step="0.1" min="0" max="2" data-story-assistant-field="${prefix}:temperature" value="${config.temperature ?? 0.7}" />
+            </label>
+          </div>
+        </section>
+
+        <section class="provider-section">
+          <div class="provider-section__head">
+            <strong>系统提示词</strong>
+            <span>不填写时使用后端默认故事策划提示词。</span>
+          </div>
+          <div class="provider-form provider-form--single">
+            <label class="provider-field">
+              <span>System Prompt</span>
+              <textarea rows="8" data-story-assistant-field="${prefix}:system_prompt">${config.system_prompt || ""}</textarea>
+            </label>
+          </div>
+        </section>
+      </div>
+      <div class="provider-card__actions">
+        <button class="btn btn--ghost" type="button" data-story-assistant-validate="${prefix}:${config.__draft ? "draft" : "persisted"}">校验配置</button>
+        <button class="btn btn--primary" type="button" data-story-assistant-save="${prefix}:${config.__draft ? "draft" : "persisted"}">保存配置</button>
+      </div>
+      <p class="provider-card__error" id="story_assistant_error_${prefix}">${config.last_error || ""}</p>
+    </article>
+  `;
+}
+
+function renderStoryAssistantsPage() {
+  const list = $("providers_list");
+  if (!list) return;
+  if (activeConfigTab !== "assistants") {
+    list.innerHTML = "";
+    return;
+  }
+  const sidebarItems = [
+    ...pendingStoryAssistantDrafts.map((item) => ({ ...item, __draft: true })),
+    ...storyAssistantConfigs,
+  ];
+  if (!sidebarItems.length) {
+    list.innerHTML = `
+      <div class="tasks-board__head tasks-board__head--compact">
+        <div>
+          <strong>故事助手</strong>
+          <p>为工作台配置一个或多个大模型故事助手。</p>
+        </div>
+        <button class="btn btn--primary" type="button" data-story-assistant-create="true">新增</button>
+      </div>
+      <div class="tasks-empty"><h3>暂无故事助手</h3><p>点击新增，填写一个 OpenAI 兼容模型配置。</p></div>
+    `;
+    return;
+  }
+  const visible = sidebarItems.filter((item) => (item.__draft ? item.id : item.assistant_code) === activeConfigSection);
+  list.innerHTML = `
+    <div class="tasks-board__head tasks-board__head--compact">
+      <div>
+        <strong>故事助手</strong>
+        <p>工作台左侧“生成故事与分镜”按钮会调用这里启用并校验通过的助手。</p>
+      </div>
+      <button class="btn btn--primary" type="button" data-story-assistant-create="true">新增</button>
+    </div>
+    ${visible.map(renderStoryAssistantCard).join("")}
+  `;
 }
 
 function materialTypeLabel(type) {
@@ -1393,7 +1835,7 @@ function materialDraft(type) {
   const draftId = globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2, 10);
   const base = { id: `draft-${draftId}`, name: "未命名素材", description: "", prompt_fragment: "", enabled: true, sort_order: 100, __draft: true };
   if (type === "visuals") return { ...base };
-  if (type === "characters") return { ...base, is_public: true };
+  if (type === "characters") return { ...base, group_name: "默认分组" };
   if (type === "voices") return { ...base, tone: "" };
   return { ...base, author: "", genre_tags: "" };
 }
@@ -1402,15 +1844,39 @@ function materialFileAccept(type) {
   return type === "visuals" || type === "characters" ? "image/*" : "audio/*";
 }
 
-function renderMaterialPreview(type, item) {
+function renderMaterialPreview(type, item, prefix) {
+  const localPreview = materialPreviewUrls.get(prefix);
+  if (localPreview) return imageThumb(localPreview, item.name);
   if (type === "visuals") return imageThumb(item.cover_url || item.public_url, item.name);
   if (type === "characters") return imageThumb(item.image_url || item.public_url, item.name);
   return audioPreview(item.audio_url || item.public_url);
 }
 
 function renderMaterialFields(type, item, prefix) {
+  const fileLabel = uploadedMaterialFileName(prefix);
   const fields = [
-    `<div class="material-asset-preview">${renderMaterialPreview(type, item)}</div>`,
+    (type === "visuals" || type === "characters")
+      ? `
+        <div class="material-upload-card">
+          <div class="material-upload-card__preview">
+            ${renderMaterialPreview(type, item, prefix)}
+          </div>
+          <div class="material-upload-card__body">
+            <div class="material-upload-card__text">
+              <strong>${type === "visuals" ? "画面预览" : "角色预览"}</strong>
+              <span>${fileLabel ? `已选择 ${fileNameLabel(fileLabel)}` : "选择图片后会立即在这里预览，保存后写入素材库。"}</span>
+            </div>
+            <div class="material-upload-card__actions">
+              <label class="btn btn--secondary material-upload-card__button">
+                <span>${fileLabel ? "替换图片" : "选择图片"}</span>
+                <input class="material-upload-card__input" type="file" accept="${materialFileAccept(type)}" data-material-file="${prefix}" />
+              </label>
+              <button class="btn btn--ghost" type="button" data-material-clear-file="${prefix}" ${fileLabel ? "" : "aria-disabled=\"true\""}>清除</button>
+            </div>
+          </div>
+        </div>
+      `
+      : `<div class="material-asset-preview">${renderMaterialPreview(type, item, prefix)}</div>`,
     `
       <label class="provider-field">
         <span>名称</span>
@@ -1431,8 +1897,10 @@ function renderMaterialFields(type, item, prefix) {
     `,
     `
       <label class="provider-field">
-        <span>${type === "visuals" || type === "characters" ? "上传图片" : "上传音频"}</span>
-        <input type="file" accept="${materialFileAccept(type)}" data-material-file="${prefix}" />
+        <span>${type === "visuals" || type === "characters" ? "素材说明" : "上传音频"}</span>
+        ${type === "visuals" || type === "characters"
+          ? `<small>支持 PNG、JPG、WEBP 等常见图片格式，可多次替换，保存后生效。</small>`
+          : `<input type="file" accept="${materialFileAccept(type)}" data-material-file="${prefix}" />`}
       </label>
     `,
     `
@@ -1444,9 +1912,9 @@ function renderMaterialFields(type, item, prefix) {
   ];
   if (type === "characters") {
     fields.push(`
-      <label class="setting-toggle provider-card__toggle">
-        <input type="checkbox" data-material-field="${prefix}:is_public" ${item.is_public ? "checked" : ""} />
-        <span>公共角色</span>
+      <label class="provider-field">
+        <span>分组</span>
+        <input type="text" data-material-field="${prefix}:group_name" value="${item.group_name || "默认分组"}" placeholder="例如：默认分组 / 主角 / 配角 / 宠物" />
       </label>
     `);
   }
@@ -1528,14 +1996,22 @@ function renderConfigSidebar() {
   const title = $("config_sidebar_title");
   if (!nav || !title) return;
   const items = activeConfigTab === "providers"
-    ? providerConfigs.map((item) => ({ id: item.provider_code, label: item.display_name }))
-    : [
+    ? [
+        ...pendingCustomProviderDrafts.map((item) => ({ id: item.provider_code, label: item.display_name || "新增视频助手" })),
+        ...providerConfigs.map((item) => ({ id: item.provider_code, label: item.display_name })),
+      ]
+    : activeConfigTab === "assistants"
+      ? [
+          ...pendingStoryAssistantDrafts.map((item) => ({ id: item.id, label: item.display_name || "新增故事助手" })),
+          ...storyAssistantConfigs.map((item) => ({ id: item.assistant_code, label: item.display_name })),
+        ]
+      : [
         { id: "visuals", label: "画面" },
         { id: "characters", label: "角色" },
         { id: "voices", label: "配音" },
         { id: "music", label: "音乐" },
       ];
-  title.textContent = activeConfigTab === "providers" ? "视频提供商" : "素材配置";
+  title.textContent = activeConfigTab === "providers" ? "视频助手" : activeConfigTab === "assistants" ? "故事助手" : "素材配置";
   nav.innerHTML = items.map((item) => `
     <button
       class="settings-sidebar__item ${activeConfigSection === item.id ? "is-active" : ""}"
@@ -1553,6 +2029,7 @@ function renderConfigPanels() {
   const title = $("config_content_title");
   const description = $("config_content_description");
   const providersRefresh = $("providers_refresh");
+  const storyAssistantsRefresh = $("story_assistants_refresh");
   const materialsRefresh = $("materials_refresh");
   if (!providersList || !materialsPanel || !title || !description) return;
 
@@ -1563,17 +2040,34 @@ function renderConfigPanels() {
   renderConfigSidebar();
 
   if (activeConfigTab === "providers") {
-    if (!providerConfigs.some((item) => item.provider_code === activeConfigSection)) {
-      activeConfigSection = providerConfigs[0]?.provider_code || "jimeng";
+    if (![...pendingCustomProviderDrafts.map((item) => item.provider_code), ...providerConfigs.map((item) => item.provider_code)].includes(activeConfigSection)) {
+      activeConfigSection = pendingCustomProviderDrafts[0]?.provider_code || providerConfigs[0]?.provider_code || "jimeng";
     }
     providersList.hidden = false;
     materialsPanel.hidden = true;
     materialsPanel.innerHTML = "";
     if (providersRefresh) providersRefresh.hidden = false;
+    if (storyAssistantsRefresh) storyAssistantsRefresh.hidden = true;
     if (materialsRefresh) materialsRefresh.hidden = true;
-    title.textContent = "视频提供商";
-    description.textContent = "管理视频生成厂商的启用状态、鉴权信息与默认请求参数。";
+    title.textContent = "视频助手";
+    description.textContent = "管理视频生成能力的启用状态、鉴权信息与默认请求参数。";
     renderProvidersPage();
+    return;
+  }
+
+  if (activeConfigTab === "assistants") {
+    if (![...pendingStoryAssistantDrafts.map((item) => item.id), ...storyAssistantConfigs.map((item) => item.assistant_code)].includes(activeConfigSection)) {
+      activeConfigSection = pendingStoryAssistantDrafts[0]?.id || storyAssistantConfigs[0]?.assistant_code || "";
+    }
+    providersList.hidden = false;
+    materialsPanel.hidden = true;
+    materialsPanel.innerHTML = "";
+    if (providersRefresh) providersRefresh.hidden = true;
+    if (storyAssistantsRefresh) storyAssistantsRefresh.hidden = false;
+    if (materialsRefresh) materialsRefresh.hidden = true;
+    title.textContent = "故事助手";
+    description.textContent = "配置工作台用于生成故事与分镜的大模型助手，支持多个 OpenAI 兼容模型并在工作台切换。";
+    renderStoryAssistantsPage();
     return;
   }
 
@@ -1584,6 +2078,7 @@ function renderConfigPanels() {
   materialsPanel.hidden = false;
   providersList.innerHTML = "";
   if (providersRefresh) providersRefresh.hidden = true;
+  if (storyAssistantsRefresh) storyAssistantsRefresh.hidden = true;
   if (materialsRefresh) materialsRefresh.hidden = false;
   title.textContent = materialTypeLabel(activeConfigSection);
   description.textContent = "维护工作区使用的素材定义。工作区只负责选择，配置在这里集中完成。";
@@ -1591,7 +2086,7 @@ function renderConfigPanels() {
 }
 
 function collectProviderForm(providerCode) {
-  const config = providerConfigs.find((item) => item.provider_code === providerCode);
+  const config = [...pendingCustomProviderDrafts, ...providerConfigs].find((item) => item.provider_code === providerCode);
   if (!config) return { enabled: false, provider_config_json: {} };
   const payload = {};
   (config.config_fields || []).forEach((field) => {
@@ -1600,8 +2095,14 @@ function collectProviderForm(providerCode) {
     payload[field.key] = field.kind === "checkbox" ? node.checked : node.value.trim();
   });
   const enabledNode = document.querySelector(`[data-provider-toggle="${providerCode}"]`);
+  const displayNameNode = document.querySelector(`[data-provider-meta="${providerCode}:display_name"]`);
+  const descriptionNode = document.querySelector(`[data-provider-meta="${providerCode}:description"]`);
+  const sortOrderNode = document.querySelector(`[data-provider-meta="${providerCode}:sort_order"]`);
   return {
     enabled: Boolean(enabledNode?.checked),
+    display_name: displayNameNode?.value.trim() || config.display_name,
+    description: descriptionNode?.value.trim() || config.description || "",
+    sort_order: sortOrderNode ? Number(sortOrderNode.value || 100) : config.sort_order,
     provider_config_json: payload,
   };
 }
@@ -1611,6 +2112,22 @@ async function loadProviderConfigsIntoState() {
   availableProviders = await fetchProviders();
 }
 
+async function loadStoryAssistantConfigsIntoState() {
+  storyAssistantConfigs = await fetchStoryAssistantConfigs();
+  availableStoryAssistants = await fetchStoryAssistants();
+}
+
+function collectStoryAssistantForm(prefix) {
+  const payload = {};
+  document.querySelectorAll(`[data-story-assistant-field^="${prefix}:"]`).forEach((node) => {
+    const field = node.dataset.storyAssistantField.split(":").slice(1).join(":");
+    payload[field] = node.type === "checkbox" ? node.checked : node.value.trim();
+  });
+  payload.sort_order = Number(payload.sort_order || 100);
+  payload.temperature = Number(payload.temperature ?? 0.7);
+  return payload;
+}
+
 function collectMaterialForm(type, id) {
   const payload = {};
   document.querySelectorAll(`[data-material-field^="${type}:${id}:"]`).forEach((node) => {
@@ -1618,17 +2135,18 @@ function collectMaterialForm(type, id) {
     payload[field] = node.type === "checkbox" ? node.checked : node.value.trim();
   });
   payload.sort_order = Number(payload.sort_order || 100);
+  if (type === "characters") payload.group_name = payload.group_name || "默认分组";
   return payload;
 }
 
 function collectMaterialFile(type, id) {
-  const node = document.querySelector(`[data-material-file="${type}:${id}"]`);
-  return node?.files?.[0] || null;
+  return uploadedMaterialFile(materialDraftKey(type, id));
 }
 
 async function initConfigCenter() {
   try {
     await loadProviderConfigsIntoState();
+    await loadStoryAssistantConfigsIntoState();
     materialConfigs = await fetchMaterialConfigs();
     activeConfigTab = "providers";
     activeConfigSection = providerConfigs[0]?.provider_code || "jimeng";
@@ -1643,10 +2161,23 @@ async function initConfigCenter() {
 
   $("providers_refresh")?.addEventListener("click", async () => {
     await loadProviderConfigsIntoState();
-    renderProvidersPage();
+    renderConfigPanels();
+  });
+  $("story_assistants_refresh")?.addEventListener("click", async () => {
+    await loadStoryAssistantConfigsIntoState();
+    renderConfigPanels();
   });
   $("materials_refresh")?.addEventListener("click", async () => {
     materialConfigs = await fetchMaterialConfigs();
+    renderConfigPanels();
+  });
+
+  document.addEventListener("change", (event) => {
+    if (!pageIsProviders()) return;
+    const input = event.target.closest("[data-material-file]");
+    if (!input) return;
+    const key = input.dataset.materialFile;
+    setMaterialUploadState(key, input.files?.[0] || null);
     renderMaterialConfigPanel();
   });
 
@@ -1654,16 +2185,23 @@ async function initConfigCenter() {
     if (!pageIsProviders()) return;
     const configTabButton = event.target.closest("[data-config-tab]");
     const configSectionButton = event.target.closest("[data-config-section]");
+    const providerCreateButton = event.target.closest("[data-provider-create]");
     const validateButton = event.target.closest("[data-provider-validate]");
     const saveButton = event.target.closest("[data-provider-save]");
+    const storyAssistantCreateButton = event.target.closest("[data-story-assistant-create]");
+    const storyAssistantValidateButton = event.target.closest("[data-story-assistant-validate]");
+    const storyAssistantSaveButton = event.target.closest("[data-story-assistant-save]");
     const materialCreateButton = event.target.closest("[data-material-create]");
     const materialSaveButton = event.target.closest("[data-material-save]");
     const materialDeleteButton = event.target.closest("[data-material-delete]");
+    const materialClearButton = event.target.closest("[data-material-clear-file]");
     if (configTabButton) {
       activeConfigTab = configTabButton.dataset.configTab;
       activeConfigSection = activeConfigTab === "providers"
-        ? (providerConfigs[0]?.provider_code || "jimeng")
-        : "visuals";
+        ? (pendingCustomProviderDrafts[0]?.provider_code || providerConfigs[0]?.provider_code || "jimeng")
+        : activeConfigTab === "assistants"
+          ? (pendingStoryAssistantDrafts[0]?.id || storyAssistantConfigs[0]?.assistant_code || "")
+          : "visuals";
       renderConfigPanels();
       return;
     }
@@ -1672,11 +2210,33 @@ async function initConfigCenter() {
       renderConfigPanels();
       return;
     }
-    if (!validateButton && !saveButton && !materialCreateButton && !materialSaveButton && !materialDeleteButton) return;
+    if (materialClearButton) {
+      clearMaterialUploadState(materialClearButton.dataset.materialClearFile);
+      renderMaterialConfigPanel();
+      return;
+    }
+    if (providerCreateButton) {
+      const draft = providerDraft();
+      pendingCustomProviderDrafts.unshift(draft);
+      activeConfigTab = "providers";
+      activeConfigSection = draft.provider_code;
+      renderConfigPanels();
+      return;
+    }
+    if (storyAssistantCreateButton) {
+      const draft = storyAssistantDraft();
+      pendingStoryAssistantDrafts.unshift(draft);
+      activeConfigTab = "assistants";
+      activeConfigSection = draft.id;
+      renderConfigPanels();
+      return;
+    }
+    if (!validateButton && !saveButton && !storyAssistantValidateButton && !storyAssistantSaveButton && !materialCreateButton && !materialSaveButton && !materialDeleteButton) return;
 
     const providerCode = validateButton?.dataset.providerValidate || saveButton?.dataset.providerSave;
     const payload = providerCode ? collectProviderForm(providerCode) : null;
     const errorNode = providerCode ? $(`provider_error_${providerCode}`) : null;
+    let failureNode = errorNode;
     if (errorNode) errorNode.textContent = "";
 
     try {
@@ -1686,8 +2246,35 @@ async function initConfigCenter() {
       }
       if (saveButton) {
         await updateProviderConfig(providerCode, payload);
+        const customDraftIndex = pendingCustomProviderDrafts.findIndex((item) => item.provider_code === providerCode);
+        if (customDraftIndex >= 0) {
+          pendingCustomProviderDrafts.splice(customDraftIndex, 1);
+        }
         await loadProviderConfigsIntoState();
-        renderProvidersPage();
+        renderConfigPanels();
+      }
+      if (storyAssistantValidateButton || storyAssistantSaveButton) {
+        const [prefix, mode] = (storyAssistantValidateButton?.dataset.storyAssistantValidate || storyAssistantSaveButton?.dataset.storyAssistantSave).split(":");
+        const payload = collectStoryAssistantForm(prefix);
+        const assistantCode = (payload.assistant_code || "").trim();
+        const storyAssistantErrorNode = $(`story_assistant_error_${prefix}`);
+        failureNode = storyAssistantErrorNode;
+        if (storyAssistantErrorNode) storyAssistantErrorNode.textContent = "";
+        if (!assistantCode) throw new Error("助手标识不能为空");
+        if (storyAssistantValidateButton) {
+          const result = await validateStoryAssistantConfig(assistantCode, payload);
+          if (storyAssistantErrorNode) storyAssistantErrorNode.textContent = result.ok ? "配置校验通过。" : (result.errors || []).join("；");
+        }
+        if (storyAssistantSaveButton) {
+          await updateStoryAssistantConfig(assistantCode, payload);
+          if (mode === "draft") {
+            const index = pendingStoryAssistantDrafts.findIndex((item) => item.id === prefix);
+            if (index >= 0) pendingStoryAssistantDrafts.splice(index, 1);
+            activeConfigSection = assistantCode;
+          }
+          await loadStoryAssistantConfigsIntoState();
+          renderConfigPanels();
+        }
       }
       if (materialCreateButton) {
         const type = materialCreateButton.dataset.materialCreate;
@@ -1706,10 +2293,12 @@ async function initConfigCenter() {
           await updateMaterialConfig(type, id, payload, file);
         }
         materialConfigs = await fetchMaterialConfigs();
+        clearMaterialUploadState(materialDraftKey(type, id));
         renderMaterialConfigPanel();
       }
       if (materialDeleteButton) {
         const [type, id, mode] = materialDeleteButton.dataset.materialDelete.split(":");
+        clearMaterialUploadState(materialDraftKey(type, id));
         if (mode === "draft") {
           pendingMaterialDrafts[type] = pendingMaterialDrafts[type].filter((item) => item.id !== id);
         } else {
@@ -1719,7 +2308,7 @@ async function initConfigCenter() {
         renderMaterialConfigPanel();
       }
     } catch (error) {
-      if (errorNode) errorNode.textContent = error.message;
+      if (failureNode) failureNode.textContent = error.message;
       if (materialSaveButton || materialDeleteButton) {
         const [type, id] = (materialSaveButton?.dataset.materialSave || materialDeleteButton?.dataset.materialDelete).split(":");
         const node = $(`material_error_${type}_${id}`);
