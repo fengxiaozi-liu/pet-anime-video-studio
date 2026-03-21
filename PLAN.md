@@ -27,10 +27,11 @@
 - [x] 小红书模板 x3：20s/35s/60s 9:16（封面更重）
 
 ### M3 导出素材包（Must）
-- [ ] 成片 MP4 导出
-- [ ] 封面 PNG 导出
-- [ ] 文案/话题 TXT 导出
-- [ ] project.json 导出（模板与参数）
+- [x] 成片 MP4 导出（/api/jobs/{id}/result — existed）
+- [x] 封面 PNG 导出（/api/jobs/{id}/export/cover + export_package.py）
+- [x] 文案/话题 TXT 导出（export_package.py: title.txt + caption.txt + hashtags.txt）
+- [x] project.json 导出（export_package.py，模板参数 + job 元数据）
+- [x] 完整 ZIP 包导出（/api/jobs/{id}/export/package — 一键下载）
 
 ### M4 Windows 打包与交付（Must）
 - [ ] Windows Portable.exe 打包链路（脚本化）
