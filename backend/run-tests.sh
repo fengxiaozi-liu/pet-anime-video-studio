@@ -28,7 +28,7 @@ pytest tests/ \
     --tb=short \
     --cov=app \
     --cov-report=term-missing \
-    --cov-report=html:../front/htmlcov \
+    --cov-report=html:./htmlcov \
     $@
 
 echo ""
