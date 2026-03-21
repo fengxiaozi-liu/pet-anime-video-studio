@@ -113,6 +113,13 @@ textarea {
   box-shadow: 0 20px 38px rgba(15, 20, 27, 0.18);
 }
 
+.btn--danger {
+  color: #fff8f7;
+  background: linear-gradient(135deg, #a43f3b 0%, #cb5f57 100%);
+  border: none;
+  box-shadow: 0 18px 36px rgba(164, 63, 59, 0.22);
+}
+
 .btn--block {
   width: 100%;
 }
@@ -902,7 +909,7 @@ textarea:focus {
 
 .resource-tabs {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 8px;
   padding: 4px;
   border-radius: 18px;
@@ -1292,6 +1299,31 @@ textarea:focus {
   pointer-events: none;
 }
 
+.topbar-provider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+  margin-right: 12px;
+  padding: 0 6px 0 16px;
+}
+
+.topbar-provider label {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.topbar-provider select {
+  width: 180px;
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
 .page-tasks,
 .page-task-detail {
   display: grid;
@@ -1343,6 +1375,7 @@ textarea:focus {
   margin: 10px 0 0;
   color: var(--muted);
   line-height: 1.7;
+  max-width: 780px;
 }
 
 .tasks-board {
@@ -1397,6 +1430,13 @@ textarea:focus {
   border-radius: 24px;
   background: rgba(255, 255, 255, 0.68);
   box-shadow: var(--shadow-sm);
+  transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+}
+
+.task-card:hover {
+  transform: translateY(-1px);
+  border-color: rgba(21, 91, 77, 0.18);
+  box-shadow: var(--shadow-md);
 }
 
 .task-card__media {
@@ -1548,6 +1588,19 @@ textarea:focus {
   flex-wrap: wrap;
 }
 
+.task-danger-zone {
+  padding: 18px;
+  border: 1px solid rgba(180, 79, 75, 0.12);
+  border-radius: 22px;
+  background: rgba(252, 236, 234, 0.58);
+}
+
+.task-action-error {
+  margin: 10px 0 0;
+  color: var(--danger);
+  line-height: 1.6;
+}
+
 .task-status-card {
   padding: 18px;
   border: 1px solid rgba(72, 52, 33, 0.08);
@@ -1608,6 +1661,22 @@ textarea:focus {
   .task-detail-hero {
     padding-left: 14px;
     padding-right: 14px;
+  }
+
+  .page-studio .studio-topbar {
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: flex-start;
+  }
+
+  .topbar-provider {
+    width: 100%;
+    margin: 0;
+    padding: 0;
+  }
+
+  .topbar-provider select {
+    width: 100%;
   }
 
   .task-card {

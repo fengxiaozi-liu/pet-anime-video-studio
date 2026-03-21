@@ -84,3 +84,12 @@ class JobStore:
             job["updated_at"] = time.time()
             data[job_id] = job
             self._save(data)
+
+    def delete(self, job_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            data = self._load()
+            job = data.pop(job_id, None)
+            if job is None:
+                return None
+            self._save(data)
+            return job

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import shutil
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -247,6 +248,31 @@ def get_job(job_id: str, _user: str = Depends(authenticated_endpoint)) -> dict[s
     if not job:
         raise HTTPException(status_code=404, detail="job not found")
     return job
+
+
+@app.delete("/api/jobs/{job_id}")
+def delete_job(job_id: str, _user: str = Depends(authenticated_endpoint)) -> dict[str, Any]:
+    job = store.delete(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="job not found")
+
+    upload_dir = UPLOAD_DIR / job_id
+    if upload_dir.exists():
+        shutil.rmtree(upload_dir, ignore_errors=True)
+
+    output_path = Path(job.get("output", ""))
+    if output_path.exists():
+        output_path.unlink(missing_ok=True)
+
+    cover_path = output_path.with_suffix(".cover.png")
+    if cover_path.exists():
+        cover_path.unlink(missing_ok=True)
+
+    export_zip = OUTPUT_DIR / "exports" / f"PetClip_{job_id[:8]}_export.zip"
+    if export_zip.exists():
+        export_zip.unlink(missing_ok=True)
+
+    return {"ok": True, "job_id": job_id}
 
 
 @app.get("/api/assets")

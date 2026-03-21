@@ -342,6 +342,13 @@ async function fetchJob(jobId) {
   return res.json();
 }
 
+async function deleteJob(jobId) {
+  const res = await fetch(`/api/jobs/${jobId}`, { method: "DELETE" });
+  if (!res.ok) throw new Error(await parseErrorResponse(res));
+  if (res.status === 204) return { ok: true };
+  return res.json();
+}
+
 async function fetchPlatformTemplates() {
   const res = await fetch("/api/platform-templates", { cache: "no-store" });
   if (!res.ok) throw new Error(await parseErrorResponse(res));
@@ -561,30 +568,6 @@ function renderCharacterTab() {
   `;
 }
 
-function renderProviderTab() {
-  return `
-    <div class="panel-section">
-      <h3>提供商</h3>
-      <h4>当前工作台固定走云端链路，选择不同 provider 控制生成模型表现。</h4>
-      <div class="voice-list">
-        ${mockProviders
-          .map(
-            (item) => `
-              <article class="voice-item ${state.provider === item.id ? "is-selected" : ""}" data-provider-id="${item.id}">
-                <div class="voice-item__meta">
-                  <strong>${item.name}</strong>
-                  <span>${item.note}</span>
-                </div>
-                <span>${item.capability}</span>
-              </article>
-            `
-          )
-          .join("")}
-      </div>
-    </div>
-  `;
-}
-
 function renderVoiceTab() {
   const query = state.searches.voice.trim().toLowerCase();
   const list = mockVoices.filter((item) => {
@@ -692,7 +675,6 @@ function renderResourcePanel() {
   const map = {
     visual: renderVisualTab,
     character: renderCharacterTab,
-    provider: renderProviderTab,
     voice: renderVoiceTab,
     music: renderMusicTab,
   };
@@ -711,6 +693,13 @@ function syncStudioInputs() {
   if ($("bgm_volume")) $("bgm_volume").value = String(state.bgmVolume);
   if ($("subtitles")) $("subtitles").checked = state.subtitles;
   if ($("template_id")) $("template_id").value = state.templateId;
+  const providerSelect = $("studio_provider");
+  if (providerSelect) {
+    providerSelect.innerHTML = mockProviders
+      .map((item) => `<option value="${item.id}">${item.name}</option>`)
+      .join("");
+    providerSelect.value = state.provider;
+  }
   renderTemplateSummary();
 }
 
@@ -930,7 +919,7 @@ function attachStudioEvents() {
 
   document.addEventListener("click", (event) => {
     if (event.target.closest("textarea, input, select")) return;
-    const target = event.target.closest("[data-tab], [data-style-id], [data-character-id], [data-character-scope], [data-provider-id], [data-voice-id], [data-music-id], [data-voice-filter], [data-music-filter], [data-action], .scene-card");
+    const target = event.target.closest("[data-tab], [data-style-id], [data-character-id], [data-character-scope], [data-voice-id], [data-music-id], [data-voice-filter], [data-music-filter], [data-action], .scene-card");
     if (!target) return;
 
     if (target.dataset.tab) {
@@ -953,12 +942,6 @@ function attachStudioEvents() {
 
     if (target.dataset.characterId) {
       toggleCharacterSelection(target.dataset.characterId);
-      renderAll();
-      return;
-    }
-
-    if (target.dataset.providerId) {
-      state.provider = target.dataset.providerId;
       renderAll();
       return;
     }
@@ -1042,6 +1025,10 @@ function attachStudioEvents() {
       state.templateId = event.target.value;
       renderTemplateSummary();
     }
+    if (event.target.id === "studio_provider") {
+      state.provider = event.target.value;
+      renderResourceNote();
+    }
     if (event.target.id === "subtitles") {
       state.subtitles = event.target.checked;
     }
@@ -1112,7 +1099,7 @@ function renderTasksList(jobs) {
     list.innerHTML = `
       <div class="tasks-empty">
         <h3>暂无任务记录</h3>
-        <p>先返回工作台创建一个生成任务。</p>
+        <p>任务会在工作台点击“生成视频”后自动出现在这里。</p>
         <a class="btn btn--secondary" href="/studio">进入工作台</a>
       </div>
     `;
@@ -1180,11 +1167,16 @@ function renderTaskDetail(job) {
   const metaGrid = $("task_meta_grid");
   const video = $("task_video");
   const placeholder = $("task_placeholder");
+  const actionError = $("task_action_error");
 
   if (title) title.textContent = `任务 ${jobShortId(job)}`;
   if (subtitle) subtitle.textContent = job.prompt || "未填写提示词";
   if (statusChip) statusChip.textContent = statusLabel(job.status);
   if (statusText) statusText.textContent = job.status_text || job.stage || "暂无状态信息";
+  if (actionError) {
+    actionError.hidden = true;
+    actionError.textContent = "";
+  }
 
   if (metaGrid) {
     const storyboard = job.storyboard || {};
@@ -1231,12 +1223,43 @@ function renderTaskDetail(job) {
 async function initTaskDetailPage() {
   const jobId = activeJobId();
   if (!jobId) return;
+  const deleteButton = $("task_delete");
+  const actionError = $("task_action_error");
 
   const load = async () => {
     const job = await fetchJob(jobId);
     renderTaskDetail(job);
     return job;
   };
+
+  deleteButton?.addEventListener("click", async () => {
+    const confirmed = window.confirm("确认删除这个任务吗？删除后无法恢复。");
+    if (!confirmed) return;
+
+    if (actionError) {
+      actionError.hidden = true;
+      actionError.textContent = "";
+    }
+
+    deleteButton.disabled = true;
+    deleteButton.textContent = "删除中...";
+
+    try {
+      if (pollingTimer) {
+        window.clearInterval(pollingTimer);
+        pollingTimer = null;
+      }
+      await deleteJob(jobId);
+      window.location.href = "/tasks";
+    } catch (error) {
+      deleteButton.disabled = false;
+      deleteButton.textContent = "删除任务";
+      if (actionError) {
+        actionError.hidden = false;
+        actionError.textContent = `删除失败：${error.message}`;
+      }
+    }
+  });
 
   try {
     const initialJob = await load();
