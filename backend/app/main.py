@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Literal
 
+from pydantic import BaseModel
 from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.responses import FileResponse, HTMLResponse
@@ -19,9 +20,9 @@ from .assets import AssetStore
 from .config import get_settings
 from .export_package import generate_export_package
 from .jobs import JobStore
-from .pipeline import run_job
+from .pipeline import TaskWorker, run_job
 from .platform_templates import get_platform_template, list_platform_templates
-from .providers.cloud_dispatch import _PROVIDERS
+from .providers.cloud_dispatch import _PROVIDERS, get_provider, list_registered_providers
 from .schema import Storyboard
 from .security import SecurityManager
 
@@ -34,6 +35,7 @@ ALLOWED_BGM_SUFFIXES = {".mp3", ".wav", ".m4a", ".aac", ".ogg"}
 
 # Global security manager instance
 security_manager: SecurityManager | None = None
+task_worker: TaskWorker | None = None
 security = HTTPBasic(auto_error=False)
 
 async def verify_api_credentials(credentials: HTTPBasicCredentials | None = Depends(security)):
@@ -68,7 +70,7 @@ async def authenticated_endpoint(user: str = Depends(verify_api_credentials)):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup: Log provider configuration status and initialize security
-    global security_manager
+    global security_manager, task_worker
     settings = get_settings()
     logger.info("=== Starting Pet Anime Video Backend ===")
     logger.info(f"DEBUG: {settings.DEBUG}")
@@ -92,18 +94,49 @@ async def lifespan(app: FastAPI):
         security_manager = SecurityManager(api_keys={}, enabled=False)
         logger.info("Security disabled (SECURITY_ENABLED=false, default for local development)")
 
-    configured_providers = []
-    for name, provider in _PROVIDERS.items():
-        if provider.is_configured():
-            configured_providers.append(name)
+    for item in list_registered_providers():
+        provider = get_provider(item["provider_code"])
+        if item["provider_code"] == "jimeng":
+            config = {
+                "app_key": settings.JIMENG_APP_KEY or settings.DOUBAO_API_KEY or settings.VOLCENGINE_API_KEY or "",
+                "app_secret": settings.JIMENG_APP_SECRET or "",
+                "req_key": settings.JIMENG_REQ_KEY,
+                "mock_mode": False,
+            }
+        elif item["provider_code"] == "openai":
+            config = {
+                "api_key": settings.OPENAI_API_KEY or "",
+                "model": settings.OPENAI_MODEL or "",
+                "mock_mode": False,
+            }
+        else:
+            config = {}
+        ok, error = provider.healthcheck(config)
+        store.seed_provider_config(
+            provider_code=item["provider_code"],
+            display_name=item["display_name"],
+            description=item["description"],
+            sort_order=item["sort_order"],
+            provider_config_json=config,
+            enabled=ok,
+            is_valid=ok,
+            last_error=error,
+        )
 
+    configured_providers = [
+        item["provider_code"] for item in store.list_provider_configs() if item["enabled"] and item["is_valid"]
+    ]
     if configured_providers:
-        logger.info(f"Configured Cloud Providers: {', '.join(configured_providers)}")
+        logger.info("Configured Providers: %s", ", ".join(configured_providers))
     else:
-        logger.warning("No cloud providers are configured (API keys missing). Use backend=local/auto.")
+        logger.warning("No configured providers available. Use /providers to configure Provider credentials.")
+
+    task_worker = TaskWorker(store=store, upload_dir=UPLOAD_DIR)
+    task_worker.start()
     logger.info("=========================================")
     yield
-    # Shutdown logic if needed
+    if task_worker is not None:
+        task_worker.stop()
 
 ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = ROOT / ".data"
@@ -116,8 +149,17 @@ app = FastAPI(title="Pet Anime Video", version="0.1.0", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=str(ROOT / "static")), name="static")
 
 templates = Jinja2Templates(directory=str(ROOT / "templates"))
-store = JobStore(DATA_DIR / "jobs.json")
+store = JobStore(settings.DATABASE_PATH)
 assets = AssetStore(root_dir=UPLOAD_DIR / "assets", index_path=DATA_DIR / "assets.json")
+
+
+class ProviderConfigUpdate(BaseModel):
+    enabled: bool = False
+    provider_config_json: dict[str, Any] = {}
+
+
+class ProviderValidateRequest(BaseModel):
+    provider_config_json: dict[str, Any] | None = None
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -140,6 +182,11 @@ def task_detail(request: Request, job_id: str):
     return templates.TemplateResponse("task_detail.html", {"request": request, "job_id": job_id})
 
 
+@app.get("/providers", response_class=HTMLResponse)
+def providers_page(request: Request):
+    return templates.TemplateResponse("providers.html", {"request": request})
+
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint for container orchestration."""
@@ -149,6 +196,89 @@ async def health_check():
 @app.get("/api/jobs")
 def list_jobs(limit: int = 20, _user: str = Depends(authenticated_endpoint)) -> dict[str, Any]:
     return {"jobs": store.list_recent(limit=limit)}
+
+
+@app.get("/api/providers")
+def list_available_providers(_user: str = Depends(authenticated_endpoint)) -> dict[str, Any]:
+    configs = {item["provider_code"]: item for item in store.list_provider_configs()}
+    items: list[dict[str, Any]] = []
+    for provider in list_registered_providers():
+        config = configs.get(provider["provider_code"])
+        if config and config["enabled"] and config["is_valid"]:
+            items.append(
+                {
+                    "provider_code": provider["provider_code"],
+                    "display_name": provider["display_name"],
+                    "description": provider["description"],
+                    "capabilities": provider["capabilities"],
+                }
+            )
+    return {"providers": items}
+
+
+@app.get("/api/provider-configs")
+def list_provider_configs(_user: str = Depends(authenticated_endpoint)) -> dict[str, Any]:
+    configs = {item["provider_code"]: item for item in store.list_provider_configs()}
+    payload: list[dict[str, Any]] = []
+    for provider in list_registered_providers():
+        config = configs.get(provider["provider_code"]) or {
+            "provider_code": provider["provider_code"],
+            "display_name": provider["display_name"],
+            "enabled": False,
+            "sort_order": provider["sort_order"],
+            "description": provider["description"],
+            "provider_config_json": {},
+            "is_valid": False,
+            "last_checked_at": None,
+            "last_error": "尚未配置",
+        }
+        payload.append(
+            {
+                **config,
+                "display_name": provider["display_name"],
+                "description": provider["description"],
+                "capabilities": provider["capabilities"],
+                "config_fields": provider["config_fields"],
+            }
+        )
+    return {"provider_configs": payload}
+
+
+@app.put("/api/provider-configs/{provider_code}")
+def update_provider_config(
+    provider_code: str,
+    body: ProviderConfigUpdate,
+    _user: str = Depends(authenticated_endpoint),
+) -> dict[str, Any]:
+    provider = get_provider(provider_code)
+    errors = provider.validate_config(body.provider_config_json)
+    item = next((p for p in list_registered_providers() if p["provider_code"] == provider_code), None)
+    if item is None:
+        raise HTTPException(status_code=404, detail="provider not found")
+    config = store.upsert_provider_config(
+        provider_code=provider_code,
+        display_name=item["display_name"],
+        description=item["description"],
+        sort_order=item["sort_order"],
+        provider_config_json=body.provider_config_json,
+        enabled=body.enabled,
+        is_valid=not errors,
+        last_error=None if not errors else "；".join(errors),
+    )
+    return {"provider_config": config}
+
+
+@app.post("/api/provider-configs/{provider_code}/validate")
+def validate_provider_config(
+    provider_code: str,
+    body: ProviderValidateRequest,
+    _user: str = Depends(authenticated_endpoint),
+) -> dict[str, Any]:
+    provider = get_provider(provider_code)
+    current = store.get_provider_config(provider_code) or {}
+    provider_config_json = body.provider_config_json if body.provider_config_json is not None else current.get("provider_config_json", {})
+    errors = provider.validate_config(provider_config_json)
+    return {"ok": not errors, "errors": errors}
 
 
 @app.get("/api/platform-templates")
@@ -162,8 +292,8 @@ async def create_job(
     _user: str = Depends(authenticated_endpoint),
     prompt: str = Form(""),
     storyboard_json: str | None = Form(None),
-    backend: Literal["auto", "local", "cloud"] = Form("cloud"),
-    provider: Literal["kling", "openai", "gemini", "doubao"] = Form("kling"),
+    backend: Literal["cloud"] = Form("cloud"),
+    provider: str = Form("jimeng"),
     template_id: str | None = Form(None),
     subtitles: bool = Form(True),
     bgm_volume: float = Form(0.25),
@@ -174,8 +304,9 @@ async def create_job(
         raise HTTPException(status_code=400, detail="Please upload at most 12 images per job.")
     if not (0.0 <= bgm_volume <= 2.0):
         raise HTTPException(status_code=400, detail="bgm_volume must be between 0.0 and 2.0.")
-    if not images and backend != "cloud":
-        raise HTTPException(status_code=400, detail="Image-free generation currently requires backend=cloud.")
+    provider_meta = store.get_provider_config(provider)
+    if provider_meta is None or not provider_meta.get("enabled") or not provider_meta.get("is_valid"):
+        raise HTTPException(status_code=400, detail=f"Provider {provider} 未配置或未启用。")
 
     job_id = str(uuid.uuid4())
     job_dir = UPLOAD_DIR / job_id
@@ -247,6 +378,8 @@ def get_job(job_id: str, _user: str = Depends(authenticated_endpoint)) -> dict[s
     job = store.get(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="job not found")
+    store.refresh_render_job_status(job_id)
+    job = store.get(job_id) or job
     return job
 
 
@@ -260,11 +393,11 @@ def delete_job(job_id: str, _user: str = Depends(authenticated_endpoint)) -> dic
     if upload_dir.exists():
         shutil.rmtree(upload_dir, ignore_errors=True)
 
-    output_path = Path(job.get("output", ""))
+    output_path = Path(job.get("final_video_url") or job.get("output", ""))
     if output_path.exists():
         output_path.unlink(missing_ok=True)
 
-    cover_path = output_path.with_suffix(".cover.png")
+    cover_path = Path(job.get("final_cover_url") or output_path.with_suffix(".cover.png"))
     if cover_path.exists():
         cover_path.unlink(missing_ok=True)
 
@@ -315,7 +448,7 @@ def download_result(job_id: str, _user: str = Depends(authenticated_endpoint)):
     if job.get("status") != "done":
         raise HTTPException(status_code=400, detail=f"job not done (status={job.get('status')})")
 
-    out = Path(job["output"])
+    out = Path(job.get("final_video_url") or job["output"])
     if not out.exists():
         raise HTTPException(status_code=404, detail="result missing")
 
@@ -352,6 +485,8 @@ def export_cover(job_id: str, _user: str = Depends(authenticated_endpoint)):
         raise HTTPException(status_code=400, detail=f"job not done (status={job.get('status')})")
 
     video_path = Path(job.get("output", ""))
+    if job.get("final_video_url"):
+        video_path = Path(job["final_video_url"])
     if not video_path.exists():
         raise HTTPException(status_code=404, detail="video missing")
 

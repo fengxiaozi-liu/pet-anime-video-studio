@@ -3,9 +3,11 @@ from __future__ import annotations
 import math
 import shlex
 import subprocess
+import shutil
 from pathlib import Path
 from typing import Any
 
+import httpx
 
 def _run(cmd: list[str]) -> None:
     p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
@@ -272,7 +274,7 @@ def render_local(
         t += float(scenes[i].get("duration_s", 5)) - fade
 
     fg = []
-    last = f"[0:v]"
+    last = "[0:v]"
     for i in range(1, len(seg_paths)):
         out = f"[v{i}]"
         off = offsets[i - 1]
@@ -327,3 +329,73 @@ def render_local(
         except Exception:
             # best-effort cleanup only
             pass
+
+
+def _download_scene_clip(url: str, target: Path) -> Path:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if url.startswith("file://"):
+        source = Path(url[7:])
+        shutil.copy2(source, target)
+        return target
+    if url.startswith("/") and Path(url).exists():
+        shutil.copy2(Path(url), target)
+        return target
+    with httpx.Client(follow_redirects=True, timeout=120.0) as client:
+        with client.stream("GET", url) as response:
+            response.raise_for_status()
+            with target.open("wb") as fh:
+                for chunk in response.iter_bytes():
+                    fh.write(chunk)
+    return target
+
+
+def compose_remote_clips(
+    *,
+    storyboard: dict[str, Any],
+    scene_video_urls: list[str],
+    out_path: Path,
+    bgm_path: Path | None = None,
+) -> Path:
+    if not scene_video_urls:
+        raise ValueError("No scene video URLs to compose")
+
+    tmp_dir = out_path.parent / f"{out_path.stem}_compose_tmp"
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+    downloaded: list[Path] = []
+    for index, url in enumerate(scene_video_urls):
+        clip_path = tmp_dir / f"scene_{index:02d}.mp4"
+        downloaded.append(_download_scene_clip(url, clip_path))
+
+    if len(downloaded) == 1:
+        base_video = tmp_dir / "base.mp4"
+        shutil.copy2(downloaded[0], base_video)
+    else:
+        concat_file = tmp_dir / "concat.txt"
+        concat_file.write_text(
+            "\n".join(f"file '{clip.resolve()}'" for clip in downloaded),
+            encoding="utf-8",
+        )
+        base_video = tmp_dir / "base.mp4"
+        cmd = [
+            "ffmpeg",
+            "-y",
+            "-f",
+            "concat",
+            "-safe",
+            "0",
+            "-i",
+            str(concat_file),
+            "-c",
+            "copy",
+            str(base_video),
+        ]
+        _run(cmd)
+
+    _finalize(
+        base_video=base_video,
+        storyboard=storyboard,
+        out_path=out_path,
+        bgm_path=bgm_path,
+        tmp_dir=tmp_dir,
+    )
+    return out_path

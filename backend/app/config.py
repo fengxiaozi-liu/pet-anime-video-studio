@@ -5,12 +5,17 @@ from typing import Optional
 
 
 class Settings(BaseSettings):
-    # API Keys
+    # Legacy / compatibility keys
     KLING_API_KEY: Optional[str] = None
     DOUBAO_API_KEY: Optional[str] = None
     OPENAI_API_KEY: Optional[str] = None
     GEMINI_API_KEY: Optional[str] = None
     VOLCENGINE_API_KEY: Optional[str] = None
+    OPENAI_MODEL: Optional[str] = None
+    JIMENG_APP_KEY: Optional[str] = None
+    JIMENG_APP_SECRET: Optional[str] = None
+    JIMENG_REQ_KEY: str = "jimeng_ti2v_v30_pro"
+    DATABASE_PATH: Path = Path(".data/tasks.db")
 
     # App Settings
     DEBUG: bool = False
@@ -27,6 +32,7 @@ class Settings(BaseSettings):
         self.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
         self.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
         self.DATA_DIR.mkdir(parents=True, exist_ok=True)
+        self.DATABASE_PATH.parent.mkdir(parents=True, exist_ok=True)
 
 
 @lru_cache()

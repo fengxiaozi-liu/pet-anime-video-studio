@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>PetClip Tasks</title>
+    <title>PetClip Provider Configs</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -12,30 +12,30 @@
     />
     <link rel="stylesheet" href="/static/styles.css" />
   </head>
-  <body data-page="tasks" class="page-tasks">
+  <body data-page="providers" class="page-providers">
     <header class="studio-topbar">
       <a class="topbar-back" href="/studio">
         <span>←</span> 返回工作台
       </a>
-      <a class="topbar-link" href="/providers">提供商配置</a>
-      <span class="topbar-link topbar-link--current">任务列表</span>
+      <span class="topbar-link topbar-link--current">提供商配置</span>
+      <a class="topbar-link" href="/tasks">任务列表</a>
     </header>
 
-    <main class="tasks-shell">
+    <main class="providers-shell">
       <section class="tasks-hero">
         <div>
-          <div class="eyebrow">Tasks</div>
-          <h1>渲染任务</h1>
-          <p>查看最近任务状态。任务只会在工作台点击“生成视频”后创建，并可进入详情页预览成片、下载视频和导出包。</p>
+          <div class="eyebrow">Providers</div>
+          <h1>Provider 配置</h1>
+          <p>统一配置即梦与 OpenAI 等云端 Provider。工作区里的 Provider 选择器将直接读取这里已启用且校验通过的配置。</p>
         </div>
       </section>
 
-      <section class="tasks-board">
+      <section class="providers-board">
         <div class="tasks-board__head">
-          <h2>最近任务</h2>
-          <button id="tasks_refresh" class="btn btn--ghost" type="button">刷新列表</button>
+          <h2>已注册 Provider</h2>
+          <button id="providers_refresh" class="btn btn--ghost" type="button">刷新配置</button>
         </div>
-        <div id="tasks_list" class="tasks-list"></div>
+        <div id="providers_list" class="providers-list"></div>
       </section>
     </main>
 

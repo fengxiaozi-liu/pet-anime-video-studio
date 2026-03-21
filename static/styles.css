@@ -1498,17 +1498,21 @@ textarea:focus {
 }
 
 .task-card__badge--queued,
-.task-card__badge--running {
+.task-card__badge--running,
+.task-card__badge--submitted,
+.task-card__badge--composing {
   color: #0e3f35;
   background: rgba(220, 234, 229, 0.96);
 }
 
-.task-card__badge--done {
+.task-card__badge--done,
+.task-card__badge--succeeded {
   color: #25715b;
   background: rgba(226, 244, 237, 0.96);
 }
 
-.task-card__badge--error {
+.task-card__badge--error,
+.task-card__badge--failed {
   color: #b44f4b;
   background: rgba(252, 236, 234, 0.96);
 }
@@ -1639,6 +1643,123 @@ textarea:focus {
   line-height: 1.5;
 }
 
+.page-providers {
+  min-height: 100dvh;
+  padding: 14px;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 12px;
+}
+
+.providers-shell {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 12px;
+}
+
+.providers-board,
+.task-scenes-panel {
+  min-height: 0;
+  padding: 20px;
+  border: 1px solid rgba(72, 52, 33, 0.08);
+  border-radius: 30px;
+  background: rgba(255, 252, 247, 0.88);
+  box-shadow: 0 16px 34px rgba(110, 87, 53, 0.08);
+}
+
+.providers-list,
+.task-scenes-list {
+  display: grid;
+  gap: 12px;
+}
+
+.provider-card,
+.task-scene-card {
+  padding: 18px;
+  border: 1px solid rgba(72, 52, 33, 0.08);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.66);
+}
+
+.provider-card__head,
+.task-scene-card__head {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.provider-card__head h3,
+.task-scenes-panel__head h2 {
+  margin: 0;
+}
+
+.provider-card__head p,
+.task-scenes-panel__head p,
+.provider-card__meta,
+.task-scene-card p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.provider-card__toggle {
+  margin-top: 14px;
+}
+
+.provider-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.provider-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.provider-field span {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.provider-field small {
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.provider-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 12px;
+}
+
+.provider-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.provider-card__error {
+  min-height: 20px;
+  margin: 12px 0 0;
+  color: var(--danger);
+  line-height: 1.5;
+}
+
+.task-scenes-panel__head {
+  margin-bottom: 12px;
+}
+
+.task-scene-card .btn {
+  margin-top: 12px;
+}
+
 @media (max-width: 1320px) {
   .tasks-list,
   .task-detail-layout {
@@ -1680,6 +1801,10 @@ textarea:focus {
   }
 
   .task-card {
+    grid-template-columns: 1fr;
+  }
+
+  .provider-form {
     grid-template-columns: 1fr;
   }
 }
