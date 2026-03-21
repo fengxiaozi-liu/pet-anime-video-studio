@@ -33,13 +33,19 @@ ALLOWED_BGM_SUFFIXES = {".mp3", ".wav", ".m4a", ".aac", ".ogg"}
 
 # Global security manager instance
 security_manager: SecurityManager | None = None
-security = HTTPBasic()
+security = HTTPBasic(auto_error=False)
 
-
-async def verify_api_credentials(credentials: HTTPBasicCredentials = Depends(security)):
+async def verify_api_credentials(credentials: HTTPBasicCredentials | None = Depends(security)):
     """Verify HTTP Basic Auth credentials."""
     if security_manager is None or not security_manager.enabled:
-        return credentials.username
+        return "anonymous"
+
+    if credentials is None:
+        raise HTTPException(
+            status_code=401,
+            detail="API credentials required",
+            headers={"WWW-Authenticate": "Basic"},
+        )
     
     # Validate credentials against configured values
     api_username = os.getenv("API_KEY_USERNAME", "admin")
@@ -73,7 +79,7 @@ async def lifespan(app: FastAPI):
     logger.info(f"OUTPUT_DIR: {settings.OUTPUT_DIR}")
 
     # Initialize security manager
-    security_enabled = os.getenv("SECURITY_ENABLED", "true").lower() == "true"
+    security_enabled = os.getenv("SECURITY_ENABLED", "false").lower() == "true"
     if security_enabled:
         try:
             security_manager = SecurityManager(
@@ -87,7 +93,7 @@ async def lifespan(app: FastAPI):
             security_manager = SecurityManager(enabled=False)
     else:
         security_manager = SecurityManager(enabled=False)
-        logger.info("Security disabled (SECURITY_ENABLED=false)")
+        logger.info("Security disabled (SECURITY_ENABLED=false, default for local development)")
 
     configured_providers = []
     for name, provider in _PROVIDERS.items():

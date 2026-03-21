@@ -197,7 +197,7 @@ KLING_API_KEY=your_kling_key
 DOUBAO_API_KEY=your_doubao_key
 
 # Authentication
-SECURITY_ENABLED=true
+SECURITY_ENABLED=false
 API_KEY_USERNAME=admin
 API_KEY_PASSWORD=changeme123
 ```
