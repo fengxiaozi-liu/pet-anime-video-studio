@@ -1186,34 +1186,76 @@ function providerFieldValue(config, field) {
 
 function renderProviderConfigCard(config) {
   const fields = config.config_fields || [];
+  const credentials = fields.filter((field) => field.key === "app_key" || field.key === "app_secret");
+  const requestFields = fields.filter((field) => field.key === "req_key" || field.key === "base_url");
+  const modeFields = fields.filter((field) => field.key === "mock_mode");
+  const statusText = config.is_valid ? "配置已校验，可以直接在工作区使用。" : (config.last_error || "配置还未通过校验。");
+  const renderField = (field) => `
+    <label class="provider-field">
+      <span>${field.label}</span>
+      ${field.kind === "checkbox"
+        ? `<input type="checkbox" data-provider-field="${config.provider_code}:${field.key}" ${providerFieldValue(config, field) ? "checked" : ""} />`
+        : `<input type="${field.kind === "password" ? "password" : "text"}" data-provider-field="${config.provider_code}:${field.key}" value="${providerFieldValue(config, field)}" placeholder="${field.placeholder || ""}" ${field.required ? "required" : ""} />`}
+      ${field.help_text ? `<small>${field.help_text}</small>` : ""}
+    </label>
+  `;
   return `
-    <article class="provider-card" data-provider-code="${config.provider_code}">
+    <article class="provider-card provider-card--jimeng" data-provider-code="${config.provider_code}">
       <div class="provider-card__head">
-        <div>
+        <div class="provider-card__title">
+          <div class="provider-card__badge">云端视频 Provider</div>
           <h3>${config.display_name}</h3>
           <p>${config.description || ""}</p>
         </div>
-        <span class="task-card__badge task-card__badge--${config.is_valid ? "done" : "error"}">${config.is_valid ? "已校验" : "待配置"}</span>
+        <div class="provider-card__status">
+          <span class="task-card__badge task-card__badge--${config.is_valid ? "done" : "error"}">${config.is_valid ? "已校验" : "待配置"}</span>
+          <span class="provider-card__status-text">${statusText}</span>
+        </div>
       </div>
-      <label class="setting-toggle provider-card__toggle">
-        <input type="checkbox" data-provider-toggle="${config.provider_code}" ${config.enabled ? "checked" : ""} />
-        <span>启用这个 Provider</span>
-      </label>
-      <div class="provider-form">
-        ${fields.map((field) => `
-          <label class="provider-field">
-            <span>${field.label}</span>
-            ${field.kind === "checkbox"
-              ? `<input type="checkbox" data-provider-field="${config.provider_code}:${field.key}" ${providerFieldValue(config, field) ? "checked" : ""} />`
-              : `<input type="${field.kind === "password" ? "password" : "text"}" data-provider-field="${config.provider_code}:${field.key}" value="${providerFieldValue(config, field)}" placeholder="${field.placeholder || ""}" ${field.required ? "required" : ""} />`}
-            ${field.help_text ? `<small>${field.help_text}</small>` : ""}
+
+      <div class="provider-card__surface">
+        <div class="provider-card__row">
+          <label class="setting-toggle provider-card__toggle">
+            <input type="checkbox" data-provider-toggle="${config.provider_code}" ${config.enabled ? "checked" : ""} />
+            <span>启用即梦作为当前可选 Provider</span>
           </label>
-        `).join("")}
+          <div class="provider-card__meta">
+            <span>Provider Code：${config.provider_code}</span>
+            <span>最近校验：${parseDate(config.last_checked_at)}</span>
+          </div>
+        </div>
+
+        <section class="provider-section">
+          <div class="provider-section__head">
+            <strong>基础凭证</strong>
+            <span>保存即梦的账号鉴权信息</span>
+          </div>
+          <div class="provider-form provider-form--two-col">
+            ${credentials.map(renderField).join("")}
+          </div>
+        </section>
+
+        <section class="provider-section">
+          <div class="provider-section__head">
+            <strong>请求参数</strong>
+            <span>控制默认 req_key 和接口访问地址</span>
+          </div>
+          <div class="provider-form provider-form--two-col">
+            ${requestFields.map(renderField).join("")}
+          </div>
+        </section>
+
+        <section class="provider-section">
+          <div class="provider-section__head">
+            <strong>开发模式</strong>
+            <span>仅用于本地联调，不建议在真实环境启用</span>
+          </div>
+          <div class="provider-form provider-form--single">
+            ${modeFields.map(renderField).join("")}
+          </div>
+        </section>
       </div>
-      <div class="provider-card__meta">
-        <span>Provider Code：${config.provider_code}</span>
-        <span>最近校验：${parseDate(config.last_checked_at)}</span>
-      </div>
+
       <div class="provider-card__actions">
         <button class="btn btn--ghost" type="button" data-provider-validate="${config.provider_code}">校验配置</button>
         <button class="btn btn--primary" type="button" data-provider-save="${config.provider_code}">保存配置</button>

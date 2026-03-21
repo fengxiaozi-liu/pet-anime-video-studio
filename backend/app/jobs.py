@@ -140,9 +140,7 @@ class JobStore:
                 images = job.get("images") or []
                 created_at = float(job.get("created_at") or _now())
                 updated_at = float(job.get("updated_at") or created_at)
-                provider_code = job.get("provider") or "jimeng"
-                if provider_code == "doubao":
-                    provider_code = "jimeng"
+                provider_code = "jimeng"
                 conn.execute(
                     """
                     INSERT OR IGNORE INTO render_jobs (
@@ -285,9 +283,6 @@ class JobStore:
         scenes = list(storyboard.get("scenes") or [])
         provider_snapshot = self.get_provider_config(provider) or {}
         provider_config = provider_snapshot.get("provider_config_json") or {}
-        if provider == "doubao":
-            provider = "jimeng"
-
         with self._lock, self._connect() as conn:
             exists = conn.execute("SELECT job_id FROM render_jobs WHERE job_id = ?", (job_id,)).fetchone()
             if exists:

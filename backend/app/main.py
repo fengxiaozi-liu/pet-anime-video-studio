@@ -96,21 +96,13 @@ async def lifespan(app: FastAPI):
 
     for item in list_registered_providers():
         provider = get_provider(item["provider_code"])
-        if item["provider_code"] == "jimeng":
-            config = {
-                "app_key": settings.JIMENG_APP_KEY or settings.DOUBAO_API_KEY or settings.VOLCENGINE_API_KEY or "",
-                "app_secret": settings.JIMENG_APP_SECRET or "",
-                "req_key": settings.JIMENG_REQ_KEY,
-                "mock_mode": False,
-            }
-        elif item["provider_code"] == "openai":
-            config = {
-                "api_key": settings.OPENAI_API_KEY or "",
-                "model": settings.OPENAI_MODEL or "",
-                "mock_mode": False,
-            }
-        else:
-            config = {}
+        config = {
+            "app_key": settings.JIMENG_APP_KEY or "",
+            "app_secret": settings.JIMENG_APP_SECRET or "",
+            "req_key": settings.JIMENG_REQ_KEY,
+            "base_url": "https://visual.volcengineapi.com",
+            "mock_mode": False,
+        }
         ok, error = provider.healthcheck(config)
         store.seed_provider_config(
             provider_code=item["provider_code"],

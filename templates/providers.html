@@ -22,17 +22,24 @@
     </header>
 
     <main class="providers-shell">
-      <section class="tasks-hero">
-        <div>
-          <div class="eyebrow">Providers</div>
-          <h1>Provider 配置</h1>
-          <p>统一配置即梦与 OpenAI 等云端 Provider。工作区里的 Provider 选择器将直接读取这里已启用且校验通过的配置。</p>
+      <section class="providers-hero">
+        <div class="providers-hero__copy">
+          <div class="eyebrow">Jimeng Provider</div>
+          <h1>即梦配置中心</h1>
+          <p>这里负责管理即梦的凭证、接口地址和联调模式。工作区只会读取这里已经启用并校验通过的配置。</p>
+        </div>
+        <div class="providers-hero__aside">
+          <div class="provider-mini-card">
+            <span>当前模式</span>
+            <strong>云端异步任务</strong>
+            <p>创建任务、轮询状态、聚合分镜、最后合成成片。</p>
+          </div>
         </div>
       </section>
 
       <section class="providers-board">
         <div class="tasks-board__head">
-          <h2>已注册 Provider</h2>
+          <h2>即梦配置</h2>
           <button id="providers_refresh" class="btn btn--ghost" type="button">刷新配置</button>
         </div>
         <div id="providers_list" class="providers-list"></div>

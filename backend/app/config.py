@@ -5,13 +5,7 @@ from typing import Optional
 
 
 class Settings(BaseSettings):
-    # Legacy / compatibility keys
-    KLING_API_KEY: Optional[str] = None
-    DOUBAO_API_KEY: Optional[str] = None
-    OPENAI_API_KEY: Optional[str] = None
-    GEMINI_API_KEY: Optional[str] = None
-    VOLCENGINE_API_KEY: Optional[str] = None
-    OPENAI_MODEL: Optional[str] = None
+    # Jimeng provider config
     JIMENG_APP_KEY: Optional[str] = None
     JIMENG_APP_SECRET: Optional[str] = None
     JIMENG_REQ_KEY: str = "jimeng_ti2v_v30_pro"
