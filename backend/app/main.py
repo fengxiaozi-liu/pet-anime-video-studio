@@ -16,6 +16,7 @@ from starlette.requests import Request
 
 from .assets import AssetStore
 from .config import get_settings
+from .export_package import generate_export_package
 from .jobs import JobStore
 from .pipeline import run_job
 from .platform_templates import get_platform_template, list_platform_templates
@@ -276,3 +277,52 @@ def download_result(job_id: str, _user: str = Depends(authenticated_endpoint)):
         raise HTTPException(status_code=404, detail="result missing")
 
     return FileResponse(path=str(out), media_type="video/mp4", filename=f"{job_id}.mp4")
+
+
+@app.get("/api/jobs/{job_id}/export/package")
+def export_package(job_id: str, _user: str = Depends(authenticated_endpoint)):
+    """Generate and download the complete export ZIP (video + cover + caption + hashtags + project.json)."""
+    job = store.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="job not found")
+    if job.get("status") != "done":
+        raise HTTPException(status_code=400, detail=f"job not done (status={job.get('status')})")
+
+    zip_path = generate_export_package(job_id, store, OUTPUT_DIR / "exports")
+    if not zip_path or not zip_path.exists():
+        raise HTTPException(status_code=500, detail="failed to generate export package")
+
+    return FileResponse(
+        path=str(zip_path),
+        media_type="application/zip",
+        filename=f"PetClip_{job_id[:8]}_export.zip",
+    )
+
+
+@app.get("/api/jobs/{job_id}/export/cover")
+def export_cover(job_id: str, _user: str = Depends(authenticated_endpoint)):
+    """Extract and download the cover PNG for a finished job."""
+    job = store.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="job not found")
+    if job.get("status") != "done":
+        raise HTTPException(status_code=400, detail=f"job not done (status={job.get('status')})")
+
+    video_path = Path(job.get("output", ""))
+    if not video_path.exists():
+        raise HTTPException(status_code=404, detail="video missing")
+
+    template = get_platform_template(job.get("template_id"))
+    cover_w = (template or {}).get("cover_width", 1080)
+    cover_h = (template or {}).get("cover_height", 1920)
+
+    cover_path = video_path.with_suffix(".cover.png")
+    # Re-generate if missing (lazy generation on first request)
+    if not cover_path.exists():
+        from .export_package import _extract_cover  # noqa: PLC0415
+        extracted = _extract_cover(video_path, cover_w, cover_h)
+        if not extracted:
+            raise HTTPException(status_code=500, detail="failed to extract cover frame")
+        cover_path = extracted
+
+    return FileResponse(path=str(cover_path), media_type="image/png", filename=f"{job_id}_cover.png")
