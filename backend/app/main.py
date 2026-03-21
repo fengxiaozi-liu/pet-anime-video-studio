@@ -129,6 +129,16 @@ def studio(request: Request):
     return templates.TemplateResponse("studio.html", {"request": request})
 
 
+@app.get("/tasks", response_class=HTMLResponse)
+def tasks(request: Request):
+    return templates.TemplateResponse("tasks.html", {"request": request})
+
+
+@app.get("/tasks/{job_id}", response_class=HTMLResponse)
+def task_detail(request: Request, job_id: str):
+    return templates.TemplateResponse("task_detail.html", {"request": request, "job_id": job_id})
+
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint for container orchestration."""

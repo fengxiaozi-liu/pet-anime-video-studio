@@ -138,8 +138,6 @@ const state = {
   bgmFile: null,
   activeSceneIndex: 0,
   lastJobId: null,
-  topbarTab: null,
-  jobsList: [],
 };
 
 let platformTemplates = [];
@@ -147,6 +145,18 @@ let pollingTimer = null;
 
 function pageIsStudio() {
   return document.body.dataset.page === "studio";
+}
+
+function pageIsTasks() {
+  return document.body.dataset.page === "tasks";
+}
+
+function pageIsTaskDetail() {
+  return document.body.dataset.page === "task-detail";
+}
+
+function activeJobId() {
+  return document.body.dataset.jobId || "";
 }
 
 function styleById(id) {
@@ -230,6 +240,14 @@ function setGlobalStatus(text, kind = "idle") {
 
 function setDownloadState(enabled, href = "#") {
   const link = $("download_result");
+  if (!link) return;
+  link.href = href;
+  link.setAttribute("aria-disabled", enabled ? "false" : "true");
+  link.classList.toggle("is-disabled", !enabled);
+}
+
+function setLinkState(id, enabled, href = "#") {
+  const link = $(id);
   if (!link) return;
   link.href = href;
   link.setAttribute("aria-disabled", enabled ? "false" : "true");
@@ -667,52 +685,9 @@ function renderMusicTab() {
   `;
 }
 
-function renderJobsTab() {
-  if (state.jobsList.length === 0) {
-    return `
-      <div class="jobs-empty">
-        <p>暂无任务记录</p>
-      </div>
-    `;
-  }
-  return `
-    <div class="jobs-list">
-      ${state.jobsList
-        .map(
-          (job) => `
-            <div class="job-item">
-              <span class="job-item__id">${job.id.slice(0, 8)}...</span>
-              <span class="job-item__status job-item__status--${job.status}">${job.status}</span>
-              <span class="job-item__stage">${job.stage || ""}</span>
-            </div>
-          `
-        )
-        .join("")}
-    </div>
-  `;
-}
-
 function renderResourcePanel() {
   const panel = $("resource_panel");
-  const jobsPanel = $("jobs_panel");
   if (!panel) return;
-
-  // Handle topbar tab switching
-  if (state.topbarTab === "jobs") {
-    panel.style.display = "none";
-    if (jobsPanel) {
-      jobsPanel.style.display = "block";
-      jobsPanel.innerHTML = renderJobsTab();
-    }
-    document.querySelectorAll(".topbar-tab").forEach((button) => {
-      button.classList.toggle("is-active", button.dataset.topbarTab === "jobs");
-    });
-    renderResourceNote();
-    return;
-  }
-
-  panel.style.display = "block";
-  if (jobsPanel) jobsPanel.style.display = "none";
 
   const map = {
     visual: renderVisualTab,
@@ -725,10 +700,6 @@ function renderResourcePanel() {
 
   document.querySelectorAll(".resource-tab").forEach((button) => {
     button.classList.toggle("is-active", button.dataset.tab === state.activeTab);
-  });
-
-  document.querySelectorAll(".topbar-tab").forEach((button) => {
-    button.classList.remove("is-active");
   });
 
   renderResourceNote();
@@ -959,25 +930,12 @@ function attachStudioEvents() {
 
   document.addEventListener("click", (event) => {
     if (event.target.closest("textarea, input, select")) return;
-    const target = event.target.closest("[data-tab], [data-topbar-tab], [data-style-id], [data-character-id], [data-character-scope], [data-provider-id], [data-voice-id], [data-music-id], [data-voice-filter], [data-music-filter], [data-action], .scene-card");
+    const target = event.target.closest("[data-tab], [data-style-id], [data-character-id], [data-character-scope], [data-provider-id], [data-voice-id], [data-music-id], [data-voice-filter], [data-music-filter], [data-action], .scene-card");
     if (!target) return;
 
     if (target.dataset.tab) {
       state.activeTab = target.dataset.tab;
       renderResourcePanel();
-      return;
-    }
-
-    if (target.dataset.topbarTab) {
-      state.topbarTab = target.dataset.topbarTab;
-      if (state.topbarTab === "jobs") {
-        fetchJobs().then((jobs) => {
-          state.jobsList = jobs;
-          renderResourcePanel();
-        });
-      } else {
-        renderResourcePanel();
-      }
       return;
     }
 
@@ -1110,6 +1068,212 @@ async function initStudio() {
   }
 }
 
+function formatDateTime(ts) {
+  if (!ts) return "未记录";
+  const date = new Date(Number(ts) * 1000);
+  if (Number.isNaN(date.getTime())) return "未记录";
+  return new Intl.DateTimeFormat("zh-CN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function statusLabel(status) {
+  const map = {
+    queued: "排队中",
+    running: "生成中",
+    done: "已完成",
+    error: "失败",
+  };
+  return map[status] || status || "未知";
+}
+
+function jobShortId(job) {
+  const jobId = job.job_id || job.id || "";
+  return jobId ? `${jobId.slice(0, 8)}...` : "未知任务";
+}
+
+function taskMetric(label, value) {
+  return `
+    <div class="task-meta-item">
+      <span>${label}</span>
+      <strong>${value || "未记录"}</strong>
+    </div>
+  `;
+}
+
+function renderTasksList(jobs) {
+  const list = $("tasks_list");
+  if (!list) return;
+  if (!jobs.length) {
+    list.innerHTML = `
+      <div class="tasks-empty">
+        <h3>暂无任务记录</h3>
+        <p>先返回工作台创建一个生成任务。</p>
+        <a class="btn btn--secondary" href="/studio">进入工作台</a>
+      </div>
+    `;
+    return;
+  }
+
+  list.innerHTML = jobs
+    .map((job) => {
+      const cover = job.status === "done"
+        ? `<img class="task-card__cover" src="/api/jobs/${job.job_id}/export/cover" alt="任务封面" loading="lazy" />`
+        : `<div class="task-card__placeholder">${statusLabel(job.status)}</div>`;
+      return `
+        <a class="task-card" href="/tasks/${job.job_id}">
+          <div class="task-card__media">${cover}</div>
+          <div class="task-card__body">
+            <div class="task-card__top">
+              <span class="task-card__id">${jobShortId(job)}</span>
+              <span class="task-card__badge task-card__badge--${job.status}">${statusLabel(job.status)}</span>
+            </div>
+            <strong>${job.prompt || "未填写提示词"}</strong>
+            <p>${job.status_text || job.stage || "暂无状态说明"}</p>
+            <div class="task-card__meta">
+              <span>${job.effective_provider || job.provider || "未指定提供商"}</span>
+              <span>${job.template_name || "未指定模板"}</span>
+              <span>${formatDateTime(job.created_at)}</span>
+            </div>
+          </div>
+        </a>
+      `;
+    })
+    .join("");
+}
+
+async function initTasksPage() {
+  const list = $("tasks_list");
+  const refresh = $("tasks_refresh");
+  if (!list) return;
+
+  const load = async () => {
+    list.innerHTML = '<div class="tasks-loading">正在加载任务列表。</div>';
+    try {
+      const jobs = await fetchJobs(30);
+      renderTasksList(jobs);
+    } catch (error) {
+      list.innerHTML = `
+        <div class="tasks-empty">
+          <h3>任务列表加载失败</h3>
+          <p>${error.message}</p>
+          <button class="btn btn--secondary" id="tasks_retry" type="button">重试</button>
+        </div>
+      `;
+      $("tasks_retry")?.addEventListener("click", load, { once: true });
+    }
+  };
+
+  refresh?.addEventListener("click", load);
+  await load();
+}
+
+function renderTaskDetail(job) {
+  const title = $("task_detail_title");
+  const subtitle = $("task_detail_subtitle");
+  const statusChip = $("task_detail_status");
+  const statusText = $("task_status_text");
+  const metaGrid = $("task_meta_grid");
+  const video = $("task_video");
+  const placeholder = $("task_placeholder");
+
+  if (title) title.textContent = `任务 ${jobShortId(job)}`;
+  if (subtitle) subtitle.textContent = job.prompt || "未填写提示词";
+  if (statusChip) statusChip.textContent = statusLabel(job.status);
+  if (statusText) statusText.textContent = job.status_text || job.stage || "暂无状态信息";
+
+  if (metaGrid) {
+    const storyboard = job.storyboard || {};
+    metaGrid.innerHTML = [
+      taskMetric("状态", statusLabel(job.status)),
+      taskMetric("阶段", job.stage || "未记录"),
+      taskMetric("提供商", job.effective_provider || job.provider || "未记录"),
+      taskMetric("链路", job.effective_backend || job.backend || "未记录"),
+      taskMetric("模板", job.template_name || "未记录"),
+      taskMetric("分镜数", String((storyboard.scenes || []).length || 0)),
+      taskMetric("时长", storyboard.duration_s ? `${storyboard.duration_s}s` : "未记录"),
+      taskMetric("分辨率", storyboard.width && storyboard.height ? `${storyboard.width}×${storyboard.height}` : "未记录"),
+      taskMetric("创建时间", formatDateTime(job.created_at)),
+      taskMetric("更新时间", formatDateTime(job.updated_at)),
+    ].join("");
+  }
+
+  const done = job.status === "done";
+  setLinkState("task_download_video", done, done ? `/api/jobs/${job.job_id}/result` : "#");
+  setLinkState("task_download_cover", done, done ? `/api/jobs/${job.job_id}/export/cover` : "#");
+  setLinkState("task_download_package", done, done ? `/api/jobs/${job.job_id}/export/package` : "#");
+
+  if (!video || !placeholder) return;
+
+  if (done) {
+    const src = `/api/jobs/${job.job_id}/result`;
+    if (video.dataset.src !== src) {
+      video.src = src;
+      video.dataset.src = src;
+      video.load();
+    }
+    video.style.display = "block";
+    placeholder.style.display = "none";
+    return;
+  }
+
+  video.removeAttribute("src");
+  video.dataset.src = "";
+  video.style.display = "none";
+  placeholder.style.display = "grid";
+  placeholder.textContent = job.status === "error" ? `任务失败：${job.error || "未知错误"}` : "视频正在生成中，完成后会自动出现在这里。";
+}
+
+async function initTaskDetailPage() {
+  const jobId = activeJobId();
+  if (!jobId) return;
+
+  const load = async () => {
+    const job = await fetchJob(jobId);
+    renderTaskDetail(job);
+    return job;
+  };
+
+  try {
+    const initialJob = await load();
+    if (initialJob.status === "done" || initialJob.status === "error") return;
+    if (pollingTimer) window.clearInterval(pollingTimer);
+    pollingTimer = window.setInterval(async () => {
+      try {
+        const job = await load();
+        if (job.status === "done" || job.status === "error") {
+          window.clearInterval(pollingTimer);
+          pollingTimer = null;
+        }
+      } catch (error) {
+        const placeholder = $("task_placeholder");
+        if (placeholder) placeholder.textContent = `任务状态刷新失败：${error.message}`;
+        window.clearInterval(pollingTimer);
+        pollingTimer = null;
+      }
+    }, 1500);
+  } catch (error) {
+    const statusChip = $("task_detail_status");
+    const subtitle = $("task_detail_subtitle");
+    const placeholder = $("task_placeholder");
+    if (statusChip) statusChip.textContent = "加载失败";
+    if (subtitle) subtitle.textContent = error.message;
+    if (placeholder) placeholder.textContent = `无法读取任务：${error.message}`;
+  }
+}
+
 if (pageIsStudio()) {
   initStudio();
+}
+
+if (pageIsTasks()) {
+  initTasksPage();
+}
+
+if (pageIsTaskDetail()) {
+  initTaskDetailPage();
 }

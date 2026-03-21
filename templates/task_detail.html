@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PetClip Task Detail</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body data-page="task-detail" data-job-id="{{ job_id }}" class="page-task-detail">
+    <header class="studio-topbar">
+      <a class="topbar-back" href="/tasks">
+        <span>←</span> 返回任务列表
+      </a>
+      <a class="topbar-link" href="/studio">返回工作台</a>
+    </header>
+
+    <main class="task-detail-shell">
+      <section class="task-detail-hero">
+        <div>
+          <div class="eyebrow">Task Detail</div>
+          <h1 id="task_detail_title">任务详情</h1>
+          <p id="task_detail_subtitle">正在读取任务状态。</p>
+        </div>
+        <div class="status-chip" id="task_detail_status">加载中</div>
+      </section>
+
+      <section class="task-detail-layout">
+        <div class="task-video-panel">
+          <div class="task-video-frame" id="task_video_frame">
+            <div class="task-placeholder" id="task_placeholder">正在读取任务结果。</div>
+            <video id="task_video" class="task-video" controls playsinline preload="metadata"></video>
+          </div>
+        </div>
+
+        <aside class="task-meta-panel">
+          <div class="task-actions">
+            <a id="task_download_video" class="btn btn--dark is-disabled" href="#" aria-disabled="true">下载视频</a>
+            <a id="task_download_cover" class="btn btn--ghost is-disabled" href="#" aria-disabled="true">下载封面</a>
+            <a id="task_download_package" class="btn btn--ghost is-disabled" href="#" aria-disabled="true">导出包</a>
+          </div>
+
+          <div class="task-status-card">
+            <h2>任务状态</h2>
+            <p id="task_status_text">正在加载任务状态。</p>
+          </div>
+
+          <div class="task-meta-grid" id="task_meta_grid"></div>
+        </aside>
+      </section>
+    </main>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>
