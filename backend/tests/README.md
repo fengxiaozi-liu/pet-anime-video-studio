@@ -12,7 +12,7 @@ cd backend
 pytest tests/ -v
 
 # Option 3: Run with coverage report
-pytest --cov=app --cov-report=html
+pytest --cov=app --cov-report=html:../front/htmlcov
 ```
 
 ## Test Files
@@ -46,8 +46,8 @@ pytest -m "not integration" -v
 
 ### Generate coverage HTML report
 ```bash
-pytest --cov=app --cov-report=html:htmlcov
-open htmlcov/index.html
+pytest --cov=app --cov-report=html:../front/htmlcov
+open ../front/htmlcov/index.html
 ```
 
 ## Writing New Tests

@@ -28,9 +28,9 @@ pytest tests/ \
     --tb=short \
     --cov=app \
     --cov-report=term-missing \
-    --cov-report=html:htmlcov \
+    --cov-report=html:../front/htmlcov \
     $@
 
 echo ""
 echo "✅ Tests complete!"
-echo "📊 Coverage report: htmlcov/index.html"
+echo "📊 Coverage report: ../front/htmlcov/index.html"

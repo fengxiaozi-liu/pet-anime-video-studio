@@ -12,6 +12,8 @@ outputs/
 output/
 tmp_test_outputs/
 tmp_test_inputs/
+front/htmlcov/
+logs/
 
 # media outputs
 *.mp4
@@ -30,3 +32,6 @@ release/
 # env
 .env
 .env.*
+.venv/
+/*/.pytest_cache/
+

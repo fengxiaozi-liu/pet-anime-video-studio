@@ -46,6 +46,7 @@ security = HTTPBasic(auto_error=False)
 
 settings = get_settings()
 ROOT = Path(__file__).resolve().parents[2]
+FRONT_ROOT = ROOT / "front"
 UPLOAD_DIR = settings.UPLOAD_DIR
 OUTPUT_DIR = settings.OUTPUT_DIR
 DATA_DIR = settings.DATA_DIR
@@ -158,9 +159,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Pet Anime Video", version="0.1.0", lifespan=lifespan)
-app.mount("/static", StaticFiles(directory=str(ROOT / "static")), name="static")
+app.mount("/static", StaticFiles(directory=str(FRONT_ROOT / "static")), name="static")
 app.mount("/media", StaticFiles(directory=str(settings.STORAGE_BASE_DIR)), name="media")
-templates = Jinja2Templates(directory=str(ROOT / "templates"))
+templates = Jinja2Templates(directory=str(FRONT_ROOT / "templates"))
 
 
 @app.get("/", response_class=HTMLResponse)

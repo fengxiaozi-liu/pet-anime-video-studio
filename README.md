@@ -1,275 +1,123 @@
-# 🐱 Pet Anime Video - AI-Powered Video Generation Platform
+# Pet Anime Video
 
-[![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-Latest-green.svg)](https://fastapi.tiangolo.com/)
-[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+一个基于 FastAPI 的宠物视频生成项目。当前仓库形态是“后端服务 + 服务端模板页面”，页面资源放在 `front/` 下，由后端直接挂载，不包含独立的前端构建工程。
 
-> **Project Status**: Under Active Development  
-> **Latest Update**: 2026-03-19  
-> **Automated Optimization**: ✅ Enabled (Daily at 9:00 AM)
+## 项目简介
 
----
+当前项目包含这些核心部分：
 
-## 📖 Overview
+- `backend/`：FastAPI 应用、任务流程、素材与 provider 配置逻辑
+- `front/`：Jinja2 模板和静态资源
+- `docker-compose.yml` 与根目录 `Dockerfile`：本地容器化启动入口
+- `config.yaml`：默认运行配置
 
-Pet Anime Video is a production-ready platform that transforms pet photos into stylized anime videos using AI models. The project includes:
+当前代码里网页入口和 API 都由同一个服务提供，默认地址为 `http://127.0.0.1:8000`，接口文档为 `http://127.0.0.1:8000/docs`。
 
-- **Backend**: FastAPI microservice with job management and pipeline orchestration
-- **Frontend**: Vue.js SPA with drag-and-drop interface
-- **AI Pipeline**: Integration with Kling, RunPod, and other video generation APIs
-- **Automated Workflow**: Smart agent-based optimization system
+## 本地启动
 
-## ✨ Features
-
-- 🎨 Multiple video generation models support
-- ⚡ Async task processing with Redis queue
-- 📊 Real-time progress tracking
-- 🔒 Secure API key management
-- 🐳 Docker-ready deployment
-- 🤖 Automated code quality improvement
-- 📱 Mobile-responsive UI
-
-## 🚀 Quick Start
-
-### Local Development
+推荐只保留一个虚拟环境位置。默认使用仓库根目录 `.venv/`，不要再在 `backend/` 下额外创建 `.venv/`。
 
 ```bash
-# Clone repository
-git clone https://github.com/ferryman-lab/pet-anime-video.git
-cd pet-anime-video
-
-# Install Python dependencies
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r backend/requirements.txt
-
-# Configure environment variables
-cp .env.example backend/.env
-# Edit .env with your API keys
-
-# Run backend server
-python backend/main.py
-
-# Visit http://localhost:8000
+cd backend
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-### Docker Deployment
+启动后可访问：
 
-The fastest way to deploy Pet Anime Video is using Docker Compose:
+- 首页：`http://127.0.0.1:8000/`
+- 工作台：`http://127.0.0.1:8000/studio`
+- 健康检查：`http://127.0.0.1:8000/health`
+- OpenAPI 文档：`http://127.0.0.1:8000/docs`
+
+默认配置来自根目录 `config.yaml`。如果只做本地渲染，可先不配置云端 provider；如果要创建云端任务，当前代码仅支持 `jimeng` provider，需要在 `config.yaml` 中启用对应凭据。
+
+## Docker 启动
+
+根目录已经统一为 Docker 构建入口：
 
 ```bash
-# 1. Clone repository and navigate to project
-git clone https://github.com/ferryman-lab/pet-anime-video.git
-cd pet-anime-video
-
-# 2. Configure environment variables
-cp .env.example backend/.env
-# Edit .env with your API keys:
-#   KLING_API_KEY=your_kling_api_key
-#   DOUBAO_API_KEY=your_doubao_api_key
-
-# 3. Build and start containers
 docker-compose up -d --build
-
-# 4. View logs
 docker-compose logs -f
+```
 
-# 5. Stop services
+停止服务：
+
+```bash
 docker-compose down
 ```
 
-**Quick Commands:**
+容器启动后会挂载这些本地目录：
 
-| Command | Description |
-|---------|-------------|
-| `docker-compose up -d` | Start in background |
-| `docker-compose down` | Stop and remove containers |
-| `docker-compose logs -f` | Follow logs |
-| `docker-compose restart` | Restart services |
-| `docker-compose ps` | Check status |
+- `backend/uploads/`：上传文件与素材
+- `backend/outputs/`：生成的视频结果
+- `backend/data/`：任务和配置数据
 
-**Directory Persistence:**
+## 快速使用
 
-Your data is safely persisted in these directories:
-- `backend/uploads/` - Uploaded images and assets
-- `backend/outputs/` - Generated videos
-- `backend/data/` - Job records and asset indices
+最直接的使用方式是先启动服务，再访问 `/docs` 或网页端。
 
-See [DEPLOYMENT.md](./docs/DEPLOYMENT.md) for advanced configuration.
+创建任务时，当前 `/api/jobs` 接口以表单提交为主，常用字段包括：
 
-## 🛠️ Automation System
+- `prompt`
+- `backend`，当前可用值以后端实现为准，默认 `cloud`
+- `provider`，当前仅支持 `jimeng`
+- `template_id`
+- `storyboard_json`
+- `subtitles`
+- `bgm_volume`
+- `bgm`
 
-### 🤖 Automated Optimization Workflow
-
-The project includes an intelligent workflow agent that automatically improves the codebase every day!
-
-**What it does:**
-- Runs daily at 9:00 AM
-- Executes pending optimization tasks in priority order
-- Uses specialized AI agents for different types of improvements
-- Tracks progress and logs all activities
-
-**Setup (one-time):**
+也可以先检查 provider 和模板：
 
 ```bash
-cd /home/fengxiaozi/.openclaw/workspace/pet-anime-video
-bash scripts/cron-setup.sh
+curl http://127.0.0.1:8000/health
+curl http://127.0.0.1:8000/api/providers
+curl http://127.0.0.1:8000/api/platform-templates
 ```
 
-**Monitor progress:**
+如果启用了鉴权，请按启动环境中的 `API_KEY_USERNAME` 和 `API_KEY_PASSWORD` 访问 API。
 
-```bash
-# View current status
-python scripts/workflow-agent.py --status
+## 目录结构
 
-# Interactive dashboard
-bash scripts/dashboard.sh
-
-# Watch logs live
-tail -f logs/workflow.log
-```
-
-**Current Tasks:**
-
-| Task | Status | Description |
-|------|--------|-------------|
-| Config Management | ✅ Completed | API key management & env handling |
-| Docker Setup | ⏳ Pending | Production Dockerfile & compose |
-| Unit Tests | ⏳ Pending | pytest framework & coverage |
-| Documentation | ⏳ Pending | API reference & guides |
-| UI Improvements | ⏳ Pending | Responsive design & UX |
-| Code Quality | ⏳ Pending | Type hints & linting |
-
-Learn more: [Auto Workflow Guide](./AUTO_WORKFLOW_README.md)
-
-## 📁 Project Structure
-
-```
+```text
 pet-anime-video/
-├── backend/                 # FastAPI backend service
+├── backend/
 │   ├── app/
-│   │   ├── main.py         # API endpoints
-│   │   ├── config.py       # Configuration management
-│   │   ├── jobs.py         # Job store & management
-│   │   └── pipeline.py     # Video generation pipeline
-│   ├── tests/              # Unit tests
-│   ├── requirements.txt    # Python dependencies
-│   └── Dockerfile          # Backend container
-├── frontend/               # Vue.js frontend application
-│   ├── src/
-│   │   ├── components/     # Vue components
-│   │   ├── api/           # API client
-│   │   └── styles/        # CSS stylesheets
-│   └── package.json       # NPM dependencies
-├── scripts/                # Utility scripts
-│   ├── workflow-agent.py  # Main workflow orchestrator
-│   ├── scheduled-workflow.py  # Cron job runner
-│   └── dashboard.sh       # Interactive dashboard
-├── docs/                   # Documentation
-│   ├── API.md             # REST API reference
-│   ├── DEPLOYMENT.md      # Deployment guide
-│   └── CONTRIBUTING.md    # Contribution guidelines
-├── logs/                   # Runtime logs
-├── systemd/               # Systemd service files
-├── WORKFLOW.md            # Workflow agent documentation
-├── AUTO_WORKFLOW_README.md  # Quick start guide
-└── README.md              # This file
+│   ├── tests/
+│   └── requirements.txt
+├── front/
+│   ├── templates/
+│   ├── static/
+│   └── htmlcov/
+├── docs/
+│   └── architecture.md
+├── Dockerfile
+├── docker-compose.yml
+├── config.yaml
+└── README.md
 ```
 
-## 🔧 Configuration
+补充说明：
 
-### Environment Variables
+- `front/` 只是页面资源目录，不是独立 SPA 工程
+- `uploads/`、`outputs/`、`backend/data/` 属于运行期数据目录
+- `.venv/`、`front/htmlcov/`、`.pytest_cache/` 都不是项目运行必需文件
 
-Create `backend/.env` from the example template:
+## 开发说明
+
+运行测试：
 
 ```bash
-cp .env.example backend/.env
+pytest backend/tests -v
 ```
 
-Required variables:
-
-```env
-# Server Configuration
-HOST=0.0.0.0
-PORT=8000
-DEBUG=false
-
-# API Keys (at least one required for cloud jobs)
-KLING_API_KEY=your_kling_key
-DOUBAO_API_KEY=your_doubao_key
-
-# Authentication
-SECURITY_ENABLED=false
-API_KEY_USERNAME=admin
-API_KEY_PASSWORD=changeme123
-```
-
-Full configuration reference: [Config Documentation](./docs/CONFIGURATION.md)
-
-## 🧪 Testing
+生成覆盖率报告：
 
 ```bash
-# Run all tests
-pytest backend/tests/ -v
-
-# Run with coverage
-pytest backend/tests/ --cov=backend/app --cov-report=html
-
-# Linting
-flake8 backend/app
-black --check backend/app
+pytest backend/tests --cov=backend/app --cov-report=html
 ```
 
-## 🤝 Contributing
-
-We welcome contributions! Please read our [Contributing Guidelines](./docs/CONTRIBUTING.md) before submitting PRs.
-
-### Development Workflow
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit changes (`git commit -m 'Add amazing feature'`)
-4. Push to branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## 📚 Documentation
-
-- [API Reference](./docs/API.md) - Complete REST API documentation
-- [Deployment Guide](./docs/DEPLOYMENT.md) - Production deployment instructions
-- [Contributing Guide](./docs/CONTRIBUTING.md) - How to contribute
-- [Workflow Agent](./WORKFLOW.md) - Automated optimization system
-- [Audit Report](./AUDIT_REPORT.md) - Project health assessment
-
-## 🛡️ Security
-
-- API keys are securely managed through environment variables
-- Input validation on all user-facing endpoints
-- Rate limiting enabled (coming soon)
-- CORS properly configured
-
-Report security vulnerabilities to security@ferryman.lab
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 👥 Team
-
-- **Developer**: ferryman
-- **AI Assistant**: Trigger (OpenClaw)
-
-## 🙏 Acknowledgments
-
-- [Kling AI](https://kling.ai) for video generation capabilities
-- [RunPod](https://runpod.io) for cloud GPU infrastructure
-- All contributors who have helped improve this project
-
-## 📞 Support
-
-- **Documentation**: See the [docs/](./docs/) folder
-- **Issues**: [GitHub Issues](https://github.com/ferryman-lab/pet-anime-video/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/ferryman-lab/pet-anime-video/discussions)
-
----
-
-**Made with ❤️ by Ferryman Lab**
-
-*Transforming pet photos into beautiful anime adventures!*
+架构说明见 [docs/architecture.md](./docs/architecture.md)。

@@ -3,7 +3,7 @@ version: '3.8'
 services:
   pet-anime-video:
     build:
-      context: ./backend
+      context: .
       dockerfile: Dockerfile
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
@@ -24,11 +24,9 @@ services:
       - ./backend/outputs:/app/outputs
       # Persist data (jobs.json, assets.json)
       - ./backend/data:/app/data
-      # Optional: mount .env file for easy configuration
-      - ./backend/.env:/app/.env:ro
-    
+
     environment:
-      # API Keys (override with your own values or use a .env file)
+      # Optional environment overrides. Primary configuration lives in config.yaml.
       - KLING_API_KEY=${KLING_API_KEY:-}
       - XINGHUN_API_KEY=${XINGHUN_API_KEY:-}
       
