@@ -6,205 +6,160 @@
     <title>PetClip Studio</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
     <link rel="stylesheet" href="/static/styles.css" />
   </head>
-  <body>
-    <header class="topbar">
-      <div class="brand">
-        <div class="brand__eyebrow">Pet Anime Video Workflow</div>
-        <div class="brand__title-row">
-          <div class="brand__title">PetClip Studio</div>
-          <span class="brand__badge">Anime Story Lab</span>
-        </div>
-        <div class="brand__sub muted">上传宠物图片，写一句故事氛围，快速生成温暖、轻盈、带故事感的动漫短视频。</div>
-      </div>
-      <div class="topbar__actions">
-        <div class="status-chip" id="global_status">空闲中</div>
-        <button id="submit" class="btn-primary">生成视频</button>
-      </div>
+  <body data-page="home" class="page-home">
+    <header class="marketing-header">
+      <a class="marketing-brand" href="/">
+        <span class="marketing-brand__mark">PC</span>
+        <span class="marketing-brand__text">
+          <strong>PetClip Studio</strong>
+          <span>Anime Story Lab</span>
+        </span>
+      </a>
+      <nav class="marketing-nav">
+        <a href="#features">能力模块</a>
+        <a href="#flow">创作流程</a>
+        <a class="btn btn--ghost" href="/studio">进入工作台</a>
+      </nav>
     </header>
 
-    <main class="workspace workspace--v2">
-      <aside class="creator-column">
-        <section class="panel hero-panel">
-          <div class="panel__head panel__head--tight">
-            <div>
-              <div class="panel__title">开始创作</div>
-              <div class="panel__desc muted">把最重要的输入集中在左侧，形成一条顺手的创作链路：文案、图片、音乐和分镜。</div>
+    <main class="marketing-main">
+      <section class="hero-shell">
+        <div class="hero-copy">
+          <div class="eyebrow">首页</div>
+          <h1>从灵感到分镜成片，统一收进一个轻量视频工作台。</h1>
+          <p>
+            现在的体验被拆成两个层级：先在首页了解能力与入口，再进入成片工作台，用助手生成故事、编辑分镜、挑选角色和声音、完成视频设置与生成。
+          </p>
+          <div class="hero-actions">
+            <a class="btn btn--primary" href="/studio">进入成片助手</a>
+            <a class="btn btn--secondary" href="#features">查看模块结构</a>
+          </div>
+          <div class="hero-stats">
+            <div class="hero-stat">
+              <strong>7</strong>
+              <span>核心模块</span>
+            </div>
+            <div class="hero-stat">
+              <strong>3 栏</strong>
+              <span>工作台布局</span>
+            </div>
+            <div class="hero-stat">
+              <strong>Mock Ready</strong>
+              <span>角色 / 配音 / 音乐库</span>
             </div>
           </div>
+        </div>
 
-          <div class="hero-strip" aria-hidden="true">
-            <div class="hero-strip__item">
-              <span class="hero-strip__kicker">Input</span>
-              <span class="hero-strip__value">Prompt + 图片</span>
+        <div class="hero-preview">
+          <div class="hero-preview__window">
+            <div class="hero-preview__top">
+              <span></span><span></span><span></span>
             </div>
-            <div class="hero-strip__item">
-              <span class="hero-strip__kicker">Flow</span>
-              <span class="hero-strip__value">模板驱动</span>
-            </div>
-            <div class="hero-strip__item">
-              <span class="hero-strip__kicker">Output</span>
-              <span class="hero-strip__value">短视频预览</span>
-            </div>
-          </div>
-
-          <div class="hero-card">
-            <div class="hero-card__title">一句话描述你想要的视频感觉</div>
-            <div class="hero-card__desc muted">比如：温暖手绘、治愈、日系、金色傍晚、轻轻推镜头。</div>
-            <label>Prompt</label>
-            <textarea id="prompt" rows="4" placeholder="描述风格/剧情...">A cozy hand-drawn anime scene with a small pet hero, watercolor backgrounds, gentle lighting.</textarea>
-          </div>
-
-          <div class="input-grid">
-            <div class="input-card input-card--images">
-              <div class="input-card__title">宠物图片（当前生成必填）</div>
-              <div class="input-card__desc muted">至少上传 1 张图片。可多张，系统会自动轮播使用。</div>
-              <label>宠物图片</label>
-              <input id="images" type="file" accept="image/*" multiple />
-            </div>
-
-            <div class="input-card input-card--music">
-              <div class="input-card__title">背景音乐</div>
-              <div class="input-card__desc muted">可选。不传也可以先看视频效果。</div>
-              <label>BGM（可选）</label>
-              <input id="bgm" type="file" accept="audio/*" />
-              <label>字幕</label>
-              <label class="checkbox checkbox--compact">
-                <input id="subtitles" type="checkbox" checked />
-                <span>生成字幕</span>
-              </label>
-            </div>
-          </div>
-
-          <div class="input-card">
-            <div class="input-card__title">Storyboard JSON（可选）</div>
-            <div class="input-card__desc muted">不填也能生成，系统会自动给你拆成 3 段。</div>
-            <textarea id="storyboard" rows="6" placeholder='{"scenes":[{"duration_s":5,"prompt":"..."}]}'></textarea>
-          </div>
-        </section>
-
-        <section class="panel assets-panel">
-          <div class="panel__head panel__head--tight">
-            <div>
-              <div class="panel__title">素材区</div>
-              <div class="panel__desc muted">首屏可见。视频素材现在先做收集展示，后面会接真正的视频工作流。</div>
-            </div>
-          </div>
-
-          <div class="dropzone dropzone--warm" id="dropzone">
-            <div class="dropzone__hint">拖拽视频到这里，或用下面按钮选择文件</div>
-            <div class="muted" style="font-size:12px;">支持 mp4 / mov / mkv / webm。当前主要用于素材暂存。</div>
-          </div>
-
-          <div class="assets-toolbar">
-            <div class="assets-toolbar__field">
-              <label>视频素材（可多选）</label>
-              <input id="videos" type="file" accept="video/*" multiple />
-            </div>
-          </div>
-
-          <div class="asset-list" id="asset_list"></div>
-        </section>
-      </aside>
-
-      <section class="main-column">
-        <section class="panel control-panel">
-          <div class="control-panel__grid">
-            <div class="queue-block">
-              <div class="queue__head">任务队列</div>
-              <div id="job_hint" class="job-hint muted">还没有任务。上传图片后点击“生成视频”。</div>
-              <div id="job_meta" class="job-meta muted"></div>
-              <div id="job_list" class="job-list">
-                <div class="muted" style="font-size:12px;">暂无任务（点击右上角“生成视频”）</div>
+            <div class="hero-preview__body">
+              <div class="hero-preview__sidebar">
+                <div class="hero-preview__bubble hero-preview__bubble--right">还原长安城的盛世风貌</div>
+                <div class="hero-preview__card">
+                  <strong>策划案已生成</strong>
+                  <span>故事摘要、角色建议、分镜草稿</span>
+                </div>
+                <div class="hero-preview__composer"></div>
               </div>
-              <pre id="log" class="log"></pre>
-            </div>
-
-            <div class="advanced-block">
-              <div class="queue__head">高级设置</div>
-              <div class="advanced-card">
-                <div class="grid2">
-                  <div>
-                    <label>Backend</label>
-                    <select id="backend">
-                      <option value="auto" selected>auto（云优先→本地兜底）</option>
-                      <option value="local">local（本地）</option>
-                      <option value="cloud">cloud（云）</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label>Provider</label>
-                    <select id="provider">
-                      <option value="kling" selected>kling（可灵）</option>
-                      <option value="gemini">gemini</option>
-                      <option value="doubao">doubao（豆包）</option>
-                      <option value="openai">openai</option>
-                    </select>
-                  </div>
+              <div class="hero-preview__editor">
+                <div class="hero-preview__editor-block"></div>
+                <div class="hero-preview__editor-card"></div>
+                <div class="hero-preview__editor-card"></div>
+              </div>
+              <div class="hero-preview__panel">
+                <div class="hero-preview__tabs">
+                  <span class="is-active">画面</span>
+                  <span>角色</span>
+                  <span>配音</span>
+                  <span>音乐</span>
                 </div>
-
-                <div class="grid2">
-                  <div>
-                    <label>BGM Volume</label>
-                    <input id="bgm_volume" type="number" value="0.25" step="0.05" min="0" max="2" />
-                  </div>
-                  <div>
-                    <label>平台模板</label>
-                    <select id="template_id"></select>
-                  </div>
+                <div class="hero-preview__grid">
+                  <span></span><span></span><span></span><span></span>
+                  <span></span><span></span><span></span><span></span>
                 </div>
-
-                <div class="template-summary" id="template_summary">
-                  正在加载平台模板...
-                </div>
-
-                <div class="advanced-note muted" id="advanced_note">如果只是先看效果，保持默认就行。auto 会优先尝试云端，失败时自动回退到本地轻量渲染链路。</div>
+                <div class="hero-preview__cta">生成视频</div>
               </div>
             </div>
           </div>
-        </section>
+        </div>
+      </section>
 
-        <section class="panel preview-panel">
-          <div class="panel__head">
-            <div>
-              <div class="panel__title">视频预览</div>
-              <div class="panel__desc muted">生成完成后会自动显示。当前区域优先服务“快速预览”，导出和封面能力可以继续向下扩展。</div>
-            </div>
-            <div class="output-actions">
-              <a id="download_mp4" class="btn is-disabled" href="#" aria-disabled="true">导出 MP4</a>
-              <button class="btn" disabled>导出封面</button>
-            </div>
-          </div>
+      <section class="marketing-section" id="features">
+        <div class="section-heading">
+          <div class="eyebrow">能力模块</div>
+          <h2>按你要的结构，重建成更清晰的创作路径。</h2>
+        </div>
+        <div class="feature-grid">
+          <article class="feature-card">
+            <span>01</span>
+            <h3>首页</h3>
+            <p>承接品牌、能力说明、案例入口与进入工作台的主 CTA。</p>
+          </article>
+          <article class="feature-card">
+            <span>02</span>
+            <h3>助手页面</h3>
+            <p>通过自然语言输入生成故事摘要、脚本草稿和分镜建议。</p>
+          </article>
+          <article class="feature-card">
+            <span>03</span>
+            <h3>故事与分镜</h3>
+            <p>上方内容概览可编辑，下方分镜卡片联动修改与重排。</p>
+          </article>
+          <article class="feature-card">
+            <span>04</span>
+            <h3>视频设置</h3>
+            <p>统一管理画面风格、分镜类型、比例、模板、字幕和音量。</p>
+          </article>
+          <article class="feature-card">
+            <span>05</span>
+            <h3>角色选择列表</h3>
+            <p>公共角色与我的角色切换，支持搜索和应用到当前分镜。</p>
+          </article>
+          <article class="feature-card">
+            <span>06</span>
+            <h3>配音库</h3>
+            <p>用 mock 数据先把选择流和界面骨架走通，后续再接真实接口。</p>
+          </article>
+          <article class="feature-card">
+            <span>07</span>
+            <h3>音乐素材库</h3>
+            <p>支持推荐音乐、无音乐和本地 BGM 文件上传并行存在。</p>
+          </article>
+        </div>
+      </section>
 
-          <div class="preview preview--large" style="position: relative;">
-            <div id="loading_overlay" style="display: none;">
-              <div id="loading_content">
-                <div class="loading-spinner"></div>
-                <div id="loading_text" class="muted">处理中...</div>
-                <div id="loading_progress_bar" class="progress-container" style="display:none; margin: 12px 0 6px; width: 240px;">
-                  <div id="loading_progress_fill" class="progress-bar"></div>
-                </div>
-                <div id="loading_eta" class="muted" style="font-size:0.75rem; margin-top: 4px;"></div>
-              </div>
-            </div>
-            <video id="video" controls style="width: 100%; display: none;"></video>
-            <div id="preview_placeholder" class="preview__placeholder muted">生成完成后将自动显示预览</div>
+      <section class="marketing-section marketing-section--flow" id="flow">
+        <div class="section-heading">
+          <div class="eyebrow">创作流程</div>
+          <h2>首页负责进入，工作台负责落地。</h2>
+        </div>
+        <div class="flow-grid">
+          <div class="flow-step">
+            <strong>Step 1</strong>
+            <h3>输入想法</h3>
+            <p>描述主题、情绪、风格与人物关系，先形成一版可用策划案。</p>
           </div>
-        </section>
+          <div class="flow-step">
+            <strong>Step 2</strong>
+            <h3>编辑故事和分镜</h3>
+            <p>把摘要、脚本和分镜卡片统一在中栏里调整，形成稳定 storyboard。</p>
+          </div>
+          <div class="flow-step">
+            <strong>Step 3</strong>
+            <h3>挑选资源与生成</h3>
+            <p>在右栏选择画风、角色、配音、音乐，最终提交到现有生成链路。</p>
+          </div>
+        </div>
       </section>
     </main>
-
-    <script src="/static/app.js"></script>
-    <script src="/static/ui-improvements.js"></script>
-    <script>
-      const vid = document.getElementById('video');
-      const ph = document.getElementById('preview_placeholder');
-      const obs = new MutationObserver(() => {
-        if (vid.style.display !== 'none') ph.style.display = 'none';
-      });
-      obs.observe(vid, { attributes: true, attributeFilter: ['style'] });
-    </script>
   </body>
 </html>

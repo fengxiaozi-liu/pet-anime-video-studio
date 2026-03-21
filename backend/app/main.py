@@ -61,11 +61,7 @@ async def authenticated_endpoint(user: str = Depends(verify_api_credentials)):
     """Dependency for authenticated endpoints with rate limiting."""
     if security_manager and security_manager.enabled:
         user_id = f"auth:{user}"
-        if not await security_manager.check_rate_limit(user_id):
-            raise HTTPException(
-                status_code=429,
-                detail="Rate limit exceeded. Try again later."
-            )
+        security_manager.check_rate_limit(user_id)
     return user
 
 @asynccontextmanager
@@ -126,6 +122,11 @@ assets = AssetStore(root_dir=UPLOAD_DIR / "assets", index_path=DATA_DIR / "asset
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
+
+
+@app.get("/studio", response_class=HTMLResponse)
+def studio(request: Request):
+    return templates.TemplateResponse("studio.html", {"request": request})
 
 
 @app.get("/health")
