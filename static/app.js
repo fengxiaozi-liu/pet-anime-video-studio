@@ -138,6 +138,8 @@ const state = {
   bgmFile: null,
   activeSceneIndex: 0,
   lastJobId: null,
+  topbarTab: null,
+  jobsList: [],
 };
 
 let platformTemplates = [];
@@ -665,9 +667,53 @@ function renderMusicTab() {
   `;
 }
 
+function renderJobsTab() {
+  if (state.jobsList.length === 0) {
+    return `
+      <div class="jobs-empty">
+        <p>暂无任务记录</p>
+      </div>
+    `;
+  }
+  return `
+    <div class="jobs-list">
+      ${state.jobsList
+        .map(
+          (job) => `
+            <div class="job-item">
+              <span class="job-item__id">${job.id.slice(0, 8)}...</span>
+              <span class="job-item__status job-item__status--${job.status}">${job.status}</span>
+              <span class="job-item__stage">${job.stage || ""}</span>
+            </div>
+          `
+        )
+        .join("")}
+    </div>
+  `;
+}
+
 function renderResourcePanel() {
   const panel = $("resource_panel");
+  const jobsPanel = $("jobs_panel");
   if (!panel) return;
+
+  // Handle topbar tab switching
+  if (state.topbarTab === "jobs") {
+    panel.style.display = "none";
+    if (jobsPanel) {
+      jobsPanel.style.display = "block";
+      jobsPanel.innerHTML = renderJobsTab();
+    }
+    document.querySelectorAll(".topbar-tab").forEach((button) => {
+      button.classList.toggle("is-active", button.dataset.topbarTab === "jobs");
+    });
+    renderResourceNote();
+    return;
+  }
+
+  panel.style.display = "block";
+  if (jobsPanel) jobsPanel.style.display = "none";
+
   const map = {
     visual: renderVisualTab,
     character: renderCharacterTab,
@@ -679,6 +725,10 @@ function renderResourcePanel() {
 
   document.querySelectorAll(".resource-tab").forEach((button) => {
     button.classList.toggle("is-active", button.dataset.tab === state.activeTab);
+  });
+
+  document.querySelectorAll(".topbar-tab").forEach((button) => {
+    button.classList.remove("is-active");
   });
 
   renderResourceNote();
@@ -909,12 +959,25 @@ function attachStudioEvents() {
 
   document.addEventListener("click", (event) => {
     if (event.target.closest("textarea, input, select")) return;
-    const target = event.target.closest("[data-tab], [data-style-id], [data-character-id], [data-character-scope], [data-provider-id], [data-voice-id], [data-music-id], [data-voice-filter], [data-music-filter], [data-action], .scene-card");
+    const target = event.target.closest("[data-tab], [data-topbar-tab], [data-style-id], [data-character-id], [data-character-scope], [data-provider-id], [data-voice-id], [data-music-id], [data-voice-filter], [data-music-filter], [data-action], .scene-card");
     if (!target) return;
 
     if (target.dataset.tab) {
       state.activeTab = target.dataset.tab;
       renderResourcePanel();
+      return;
+    }
+
+    if (target.dataset.topbarTab) {
+      state.topbarTab = target.dataset.topbarTab;
+      if (state.topbarTab === "jobs") {
+        fetchJobs().then((jobs) => {
+          state.jobsList = jobs;
+          renderResourcePanel();
+        });
+      } else {
+        renderResourcePanel();
+      }
       return;
     }
 

@@ -1216,3 +1216,106 @@ textarea:focus {
     grid-template-columns: 1fr;
   }
 }
+
+/* Studio Top Bar */
+.studio-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 24px;
+  background: var(--surface-strong);
+  border-bottom: 1px solid var(--line);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.topbar-back {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-weight: 500;
+  text-decoration: none;
+  transition: color 180ms ease;
+}
+
+.topbar-back:hover {
+  color: var(--text);
+}
+
+.topbar-tabs {
+  display: flex;
+  gap: 8px;
+}
+
+.topbar-tab {
+  padding: 6px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 180ms ease;
+}
+
+.topbar-tab:hover {
+  border-color: var(--line-strong);
+  color: var(--text);
+}
+
+.topbar-tab.is-active {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+}
+
+.jobs-panel {
+  padding: 16px;
+}
+
+.jobs-panel h3 {
+  margin: 0 0 16px 0;
+  font-size: 16px;
+  color: var(--text);
+}
+
+.job-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  margin-bottom: 8px;
+}
+
+.job-item__id {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.job-item__status {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.job-item__status--running {
+  color: var(--primary);
+}
+
+.job-item__status--done {
+  color: var(--success);
+}
+
+.job-item__status--error {
+  color: var(--danger);
+}
+
+.job-item__stage {
+  font-size: 12px;
+  color: var(--muted);
+}
