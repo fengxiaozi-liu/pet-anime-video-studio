@@ -17,7 +17,6 @@ import subprocess
 import zipfile
 from pathlib import Path
 
-from .jobs import JobStore
 from .platform_templates import get_platform_template
 
 
@@ -125,14 +124,29 @@ def _build_project_json(job: dict) -> dict:
 # Main export function
 # ---------------------------------------------------------------------------
 
-def generate_export_package(job_id: str, store: JobStore, output_dir: Path) -> Path | None:
+def generate_export_package(job_id: str, render_repo, output_dir: Path) -> Path | None:
     """
     Produce an export ZIP at `output_dir` / `{job_id}_export.zip`.
     Returns the zip path, or None if the job is not done / video missing.
     """
-    job = store.get(job_id)
-    if not job:
+    job_obj = render_repo.get(job_id)
+    if not job_obj:
         return None
+    job = {
+        "job_id": job_obj.job_id,
+        "status": job_obj.status,
+        "output": job_obj.output_path,
+        "template_id": job_obj.template_id,
+        "template_name": job_obj.template_name,
+        "prompt": job_obj.prompt,
+        "platform": job_obj.platform,
+        "backend": job_obj.backend,
+        "provider": job_obj.provider_code,
+        "storyboard": job_obj.storyboard,
+        "images": job_obj.images,
+        "bgm": job_obj.bgm_path,
+        "created_at": job_obj.created_at,
+    }
     if job.get("status") != "done":
         return None
 

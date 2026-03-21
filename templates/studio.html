@@ -21,7 +21,6 @@
         <label for="studio_provider">提供商</label>
         <select id="studio_provider"></select>
       </div>
-      <a class="topbar-link" href="/providers">提供商配置</a>
       <a class="topbar-link" href="/tasks">任务列表</a>
     </header>
     <div class="studio-shell">
@@ -55,20 +54,24 @@
           <div class="editor-header">
             <div>
               <div class="eyebrow">故事与分镜视频</div>
-              <h2>内容概览与分镜编辑</h2>
+              <h2>策划文档与分镜脚本</h2>
             </div>
             <div class="status-chip" id="global_status">空闲中</div>
           </div>
 
-          <div class="editor-overview">
-            <div class="overview-card">
-              <label for="story_summary">内容概览</label>
-              <textarea id="story_summary" rows="5" placeholder="助手生成后，这里会出现故事摘要。"></textarea>
+          <div class="document-card">
+            <div class="document-card__head">
+              <div>
+                <label for="story_document">策划正文</label>
+                <p>按内容概览、角色列表、分镜脚本的连续文档方式编辑，主编辑体验先对齐剪映式内容组织。</p>
+              </div>
             </div>
-            <div class="overview-card">
-              <label for="story_text">故事文本</label>
-              <textarea id="story_text" rows="9" placeholder="这里可以继续润色完整故事或脚本。"></textarea>
-            </div>
+            <textarea
+              id="story_document"
+              class="story-document"
+              rows="18"
+              placeholder="【内容概览】&#10;在这里整理视频整体概述。&#10;&#10;【角色列表】&#10;1. 主角：描述角色身份与外观。&#10;&#10;【分镜脚本】&#10;分镜1：描述画面与旁白。"
+            ></textarea>
           </div>
 
           <div class="editor-toolbar">

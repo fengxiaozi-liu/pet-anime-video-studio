@@ -1,0 +1,36 @@
+app:
+  debug: false
+  data_dir: ".data"
+  upload_dir: "uploads"
+  output_dir: "outputs"
+
+database:
+  driver: "sqlite"
+  sqlite:
+    path: ".data/tasks.db"
+  mysql:
+    host: "127.0.0.1"
+    port: 3306
+    db: "petclip"
+    user: "root"
+    password: ""
+
+storage:
+  provider: "local"
+  local:
+    base_dir: "uploads/assets"
+    public_base_url: "http://127.0.0.1:8000/media"
+
+providers:
+  jimeng:
+    enabled: false
+    app_key: ""
+    app_secret: ""
+    req_key: "jimeng_ti2v_v30_pro"
+    base_url: "https://visual.volcengineapi.com"
+    mock_mode: false
+
+worker:
+  poll_interval_s: 2.0
+  max_retry: 20
+  compose_enabled: true

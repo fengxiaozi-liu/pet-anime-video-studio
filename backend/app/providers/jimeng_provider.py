@@ -4,6 +4,7 @@ import time
 import uuid
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from .base import BaseProvider, ProviderField, ProviderTaskState, ProviderTaskSubmission, SceneTaskContext
 from .mock_clip import build_mock_clip
@@ -43,6 +44,62 @@ class JimengProvider(BaseProvider):
     def _is_mock_mode(self, provider_config_json: dict[str, Any]) -> bool:
         return bool(provider_config_json.get("mock_mode"))
 
+    def _resolve_aspect_ratio(self, scene: SceneTaskContext) -> str:
+        explicit_ratio = str(scene.storyboard.get("aspect_ratio") or "").strip()
+        if explicit_ratio:
+            return explicit_ratio
+        width = int(scene.storyboard.get("width", 0) or 0)
+        height = int(scene.storyboard.get("height", 0) or 0)
+        if width > 0 and height > 0:
+            known = {
+                (16, 9): "16:9",
+                (9, 16): "9:16",
+                (1, 1): "1:1",
+                (4, 3): "4:3",
+                (3, 4): "3:4",
+                (21, 9): "21:9",
+            }
+            ratio = width / height
+            for pair, label in known.items():
+                if abs(ratio - (pair[0] / pair[1])) < 0.03:
+                    return label
+            return f"{width}:{height}"
+        raise ValueError("aspect_ratio missing and width/height unavailable")
+
+    def _build_prompt(self, scene: SceneTaskContext) -> str:
+        parts: list[str] = []
+        scene_prompt = str(scene.scene_payload.get("prompt") or scene.prompt or "").strip()
+        style_prompt = str(scene.storyboard.get("style_prompt") or "").strip()
+        story_summary = str(scene.storyboard.get("story_summary") or "").strip()
+        character_fragments = [
+            str(item).strip()
+            for item in (scene.scene_payload.get("character_prompt_fragments") or [])
+            if str(item).strip()
+        ]
+        if scene_prompt:
+            parts.append(scene_prompt)
+        if style_prompt:
+            parts.append(f"visual style: {style_prompt}")
+        if character_fragments:
+            parts.append(f"characters: {'; '.join(character_fragments)}")
+        if story_summary:
+            parts.append(f"story context: {story_summary}")
+        return "\n".join(parts).strip()
+
+    def _resolve_visual_asset_url(self, scene: SceneTaskContext) -> str | None:
+        candidates = [
+            scene.scene_payload.get("visual_asset_url"),
+            scene.storyboard.get("visual_asset_url"),
+        ]
+        for value in candidates:
+            candidate = str(value or "").strip()
+            if not candidate:
+                continue
+            parsed = urlparse(candidate)
+            if parsed.scheme in {"http", "https"} and parsed.netloc:
+                return candidate
+        return None
+
     def create_task(
         self,
         scene: SceneTaskContext,
@@ -53,30 +110,20 @@ class JimengProvider(BaseProvider):
         height = int(scene.storyboard.get("height", 720))
         duration_s = float(scene.scene_payload.get("duration_s", 4))
         frames = 121 if duration_s <= 5 else 241
-
-        ratio = "16:9"
-        if width > 0 and height > 0:
-            ratio = f"{width}:{height}"
-            known = {
-                (16, 9): "16:9",
-                (9, 16): "9:16",
-                (1, 1): "1:1",
-                (4, 3): "4:3",
-                (3, 4): "3:4",
-                (21, 9): "21:9",
-            }
-            for pair, label in known.items():
-                if abs((width / height) - (pair[0] / pair[1])) < 0.03:
-                    ratio = label
-                    break
+        prompt = self._build_prompt(scene)
+        if not prompt:
+            raise ValueError("scene prompt is empty")
 
         payload = {
             "req_key": req_key,
-            "prompt": scene.scene_payload.get("prompt") or scene.prompt,
+            "prompt": prompt,
             "seed": -1,
             "frames": frames,
-            "aspect_ratio": ratio,
+            "aspect_ratio": self._resolve_aspect_ratio(scene),
         }
+        visual_asset_url = self._resolve_visual_asset_url(scene)
+        if visual_asset_url:
+            payload["image_urls"] = [visual_asset_url]
 
         if self._is_mock_mode(provider_config_json):
             task_id = f"jimeng-mock-{uuid.uuid4()}"

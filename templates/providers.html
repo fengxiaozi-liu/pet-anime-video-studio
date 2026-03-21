@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>PetClip Provider Configs</title>
+    <title>PetClip Config Center</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -13,38 +13,53 @@
     <link rel="stylesheet" href="/static/styles.css" />
   </head>
   <body data-page="providers" class="page-providers">
-    <header class="studio-topbar">
-      <a class="topbar-back" href="/studio">
-        <span>←</span> 返回工作台
-      </a>
-      <span class="topbar-link topbar-link--current">提供商配置</span>
-      <a class="topbar-link" href="/tasks">任务列表</a>
-    </header>
-
-    <main class="providers-shell">
-      <section class="providers-hero">
-        <div class="providers-hero__copy">
-          <div class="eyebrow">Jimeng Provider</div>
-          <h1>即梦配置中心</h1>
-          <p>这里负责管理即梦的凭证、接口地址和联调模式。工作区只会读取这里已经启用并校验通过的配置。</p>
-        </div>
-        <div class="providers-hero__aside">
-          <div class="provider-mini-card">
-            <span>当前模式</span>
-            <strong>云端异步任务</strong>
-            <p>创建任务、轮询状态、聚合分镜、最后合成成片。</p>
+    <div class="settings-shell">
+      <header class="settings-header">
+        <div class="settings-header__brand">
+          <a class="topbar-back topbar-back--settings" href="/">
+            <span>←</span> 返回首页
+          </a>
+          <div class="settings-header__title">
+            <div class="eyebrow">Settings</div>
+            <h1>配置中心</h1>
           </div>
         </div>
-      </section>
-
-      <section class="providers-board">
-        <div class="tasks-board__head">
-          <h2>即梦配置</h2>
-          <button id="providers_refresh" class="btn btn--ghost" type="button">刷新配置</button>
+        <div class="settings-header__actions">
+          <a class="topbar-link" href="/studio">工作台</a>
+          <a class="topbar-link" href="/tasks">任务列表</a>
         </div>
-        <div id="providers_list" class="providers-list"></div>
-      </section>
-    </main>
+      </header>
+
+      <main class="settings-main">
+        <div class="settings-primary-tabs">
+          <button class="settings-primary-tab is-active" data-config-tab="providers" type="button">视频提供商</button>
+          <button class="settings-primary-tab" data-config-tab="materials" type="button">素材配置</button>
+        </div>
+
+        <section class="settings-layout">
+          <aside class="settings-sidebar">
+            <div class="settings-sidebar__title" id="config_sidebar_title">视频提供商</div>
+            <nav class="settings-sidebar__nav" id="config_sidebar_nav"></nav>
+          </aside>
+
+          <section class="settings-content">
+            <div class="settings-content__header">
+              <div>
+                <h2 id="config_content_title">视频提供商</h2>
+                <p id="config_content_description">管理视频生成厂商的启用状态、鉴权信息与默认请求参数。</p>
+              </div>
+              <div class="settings-content__actions">
+                <button id="providers_refresh" class="btn btn--ghost" type="button">刷新配置</button>
+                <button id="materials_refresh" class="btn btn--ghost" type="button" hidden>刷新素材</button>
+              </div>
+            </div>
+
+            <div id="providers_list" class="providers-list"></div>
+            <div id="materials_config_panel" class="materials-config-panel" hidden></div>
+          </section>
+        </section>
+      </main>
+    </div>
 
     <script src="/static/app.js"></script>
   </body>

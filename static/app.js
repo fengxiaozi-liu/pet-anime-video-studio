@@ -1,74 +1,23 @@
 const $ = (id) => document.getElementById(id);
 
-const mockVisualStyles = [
-  {
-    id: "china-epic",
-    name: "华丽古风",
-    description: "盛世古风、服饰讲究、建筑恢弘、色彩华丽。",
-    mediaClass: "resource-card__media--comic",
-    styleText: "ornate ancient Chinese fantasy, cinematic lighting, rich costume details, grand architecture",
-  },
-  {
-    id: "healing-anime",
-    name: "治愈动漫",
-    description: "柔和光线、日常感、清新空气和轻松氛围。",
-    mediaClass: "",
-    styleText: "healing anime, soft daylight, calm pacing, pastel color palette",
-  },
-  {
-    id: "photo-film",
-    name: "写实电影",
-    description: "写实构图、电影感层次、镜头真实。",
-    mediaClass: "resource-card__media--photo",
-    styleText: "cinematic realism, film grain, dramatic composition, premium texture",
-  },
-  {
-    id: "fantasy-xianxia",
-    name: "仙侠古风",
-    description: "人物飘逸、氛围梦幻、光晕和雾感明显。",
-    mediaClass: "resource-card__media--fantasy",
-    styleText: "xianxia fantasy, ethereal atmosphere, floating garments, misty light",
-  },
-];
-
-const mockCharacters = {
-  public: [
-    { id: "guard", name: "城门守卫", note: "铠甲、长枪、威严站姿", mediaClass: "resource-card__media--photo" },
-    { id: "merchant", name: "商贩", note: "热闹叫卖，带生活感", mediaClass: "resource-card__media--cute" },
-    { id: "musician", name: "宫廷乐师", note: "适合宴乐场景", mediaClass: "resource-card__media--comic" },
-    { id: "dancer", name: "舞姬", note: "舞动镜头中的焦点角色", mediaClass: "resource-card__media--fantasy" },
-    { id: "scholar", name: "文人", note: "茶楼、诗会、对谈", mediaClass: "" },
-  ],
-  mine: [
-    { id: "my-hero", name: "我的主角", note: "保留你的长期人设", mediaClass: "resource-card__media--photo" },
-    { id: "my-pet", name: "我的宠物", note: "适合宠物故事长线角色", mediaClass: "resource-card__media--cute" },
-  ],
+const materialLibrary = {
+  visuals: [],
+  characters: [],
+  voices: [],
+  music: [],
 };
-
-const mockVoices = [
-  { id: "voice-story-f", name: "曼波讲故事", type: "热门", tone: "温柔叙述 · 女声" },
-  { id: "voice-broadcast-m", name: "自然纪录片", type: "热门", tone: "沉稳旁白 · 男声" },
-  { id: "voice-host-f", name: "知性女声", type: "推荐", tone: "轻播音感 · 女声" },
-  { id: "voice-youth-m", name: "清亮男声", type: "最新", tone: "年轻解说 · 男声" },
-];
-
-const mockMusic = [
-  { id: "music-peace", name: "风（治愈纯音乐）", author: "治愈纯音乐", duration: "02:37", type: "推荐音乐" },
-  { id: "music-ancient", name: "午后古巷轻松", author: "看见音乐", duration: "02:24", type: "推荐音乐" },
-  { id: "music-warm", name: "欢快愉悦小调", author: "李闰驰", duration: "01:27", type: "热门" },
-];
 
 const state = {
   assistantPrompt: "",
   storySummary: "",
   storyText: "",
   scenes: [],
-  visualStyleId: "china-epic",
+  visualStyleId: "",
   characterIds: [],
-  voiceId: "voice-story-f",
-  musicId: "music-peace",
+  voiceId: "",
+  musicId: "",
   templateId: "",
-  aspectRatio: "16:9",
+  aspectRatio: "",
   sceneType: "智能分镜，图片 4.0，Seedance 1.0",
   subtitles: true,
   bgmVolume: 0.25,
@@ -89,8 +38,13 @@ const state = {
 
 let availableProviders = [];
 let providerConfigs = [];
+let materialConfigs = { visuals: [], characters: [], voices: [], music: [] };
 let platformTemplates = [];
 let pollingTimer = null;
+let activeMaterialConfigTab = "visuals";
+let activeConfigTab = "providers";
+let activeConfigSection = "jimeng";
+const pendingMaterialDrafts = { visuals: [], characters: [], voices: [], music: [] };
 
 function page() {
   return document.body.dataset.page || "";
@@ -116,16 +70,30 @@ function activeJobId() {
   return document.body.dataset.jobId || "";
 }
 
+function materialsOf(type) {
+  return materialLibrary[type] || [];
+}
+
 function styleById(id) {
-  return mockVisualStyles.find((item) => item.id === id) || mockVisualStyles[0];
+  return materialsOf("visuals").find((item) => item.id === id) || materialsOf("visuals")[0] || null;
+}
+
+function imageThumb(url, alt = "") {
+  if (!url) return '<div class="resource-card__media resource-card__media--placeholder"></div>';
+  return `<div class="resource-card__media resource-card__media--image"><img src="${url}" alt="${alt}" loading="lazy" /></div>`;
+}
+
+function audioPreview(url) {
+  if (!url) return '<div class="resource-audio resource-audio--empty">未上传音频</div>';
+  return `<audio class="resource-audio" controls preload="none" src="${url}"></audio>`;
 }
 
 function selectedVoice() {
-  return mockVoices.find((item) => item.id === state.voiceId) || null;
+  return materialsOf("voices").find((item) => item.id === state.voiceId) || null;
 }
 
 function selectedMusic() {
-  return mockMusic.find((item) => item.id === state.musicId) || null;
+  return materialsOf("music").find((item) => item.id === state.musicId) || null;
 }
 
 function selectedProvider() {
@@ -133,7 +101,36 @@ function selectedProvider() {
 }
 
 function charactersByIds(ids) {
-  return [...mockCharacters.public, ...mockCharacters.mine].filter((item) => ids.includes(item.id));
+  return materialsOf("characters").filter((item) => ids.includes(item.id));
+}
+
+function inferAspectRatio(width, height) {
+  const known = {
+    "16:9": [16, 9],
+    "9:16": [9, 16],
+    "1:1": [1, 1],
+    "4:3": [4, 3],
+    "3:4": [3, 4],
+    "21:9": [21, 9],
+  };
+  if (!width || !height) return "16:9";
+  const ratio = Number(width) / Number(height);
+  for (const [label, pair] of Object.entries(known)) {
+    if (Math.abs(ratio - (pair[0] / pair[1])) < 0.03) return label;
+  }
+  return `${width}:${height}`;
+}
+
+function aspectDimensions(ratio) {
+  const map = {
+    "16:9": { width: 1280, height: 720 },
+    "9:16": { width: 1080, height: 1920 },
+    "1:1": { width: 1080, height: 1080 },
+    "4:3": { width: 1280, height: 960 },
+    "3:4": { width: 1080, height: 1440 },
+    "21:9": { width: 1680, height: 720 },
+  };
+  return map[ratio] || map["16:9"];
 }
 
 function parseDate(ts) {
@@ -206,6 +203,50 @@ async function fetchProviders() {
 async function fetchProviderConfigs() {
   const data = await fetchJson("/api/provider-configs", { cache: "no-store" });
   return data.provider_configs || [];
+}
+
+async function fetchMaterials() {
+  const data = await fetchJson("/api/materials", { cache: "no-store" });
+  return {
+    visuals: data.visuals || [],
+    characters: data.characters || [],
+    voices: data.voices || [],
+    music: data.music || [],
+  };
+}
+
+async function fetchMaterialConfigs() {
+  const data = await fetchJson("/api/material-configs", { cache: "no-store" });
+  return {
+    visuals: data.visuals || [],
+    characters: data.characters || [],
+    voices: data.voices || [],
+    music: data.music || [],
+  };
+}
+
+async function createMaterialConfig(type, item, file) {
+  const formData = new FormData();
+  formData.append("metadata_json", JSON.stringify(item));
+  if (file) formData.append("file", file);
+  return fetchJson(`/api/material-configs/${type}`, {
+    method: "POST",
+    body: formData,
+  });
+}
+
+async function updateMaterialConfig(type, id, item, file = null) {
+  const formData = new FormData();
+  formData.append("metadata_json", JSON.stringify(item));
+  if (file) formData.append("file", file);
+  return fetchJson(`/api/material-configs/${type}/${id}`, {
+    method: "PUT",
+    body: formData,
+  });
+}
+
+async function deleteMaterialConfig(type, id) {
+  return fetchJson(`/api/material-configs/${type}/${id}`, { method: "DELETE" });
 }
 
 async function updateProviderConfig(providerCode, payload) {
@@ -318,33 +359,62 @@ function buildDraftFromPrompt(prompt) {
       prompt: `以“${clean}”为主题的开场镜头，先建立世界观和空间氛围，让观众迅速进入故事。`,
       subtitle: `故事从这里开始：${clean}`,
       duration_s: 4,
-      characterIds: state.characterIds.length ? [...state.characterIds] : ["my-pet"],
+      characterIds: [...state.characterIds],
     },
     {
       title: "角色登场",
       prompt: `主角 ${leadNames} 正式进入画面，镜头更贴近人物表情和动作，建立情绪联系。`,
       subtitle: `${leadNames} 的故事逐渐展开。`,
       duration_s: 4,
-      characterIds: state.characterIds.length ? [...state.characterIds] : ["guard"],
+      characterIds: [...state.characterIds],
     },
     {
       title: "情绪推进",
       prompt: `通过更丰富的环境和动作细节推进故事，强化“${style.name}”的视觉氛围。`,
       subtitle: `情绪来到最饱满的一段。`,
       duration_s: 4,
-      characterIds: state.characterIds.length ? [...state.characterIds] : ["merchant"],
+      characterIds: [...state.characterIds],
     },
     {
       title: "收束结尾",
       prompt: `回到主角视角，用一个有余韵的镜头结束，形成完整闭环。`,
       subtitle: "故事在温柔的尾声里结束。",
       duration_s: 4,
-      characterIds: state.characterIds.length ? [...state.characterIds] : ["my-pet"],
+      characterIds: [...state.characterIds],
     },
   ];
-  const summary = `这个视频以“${clean}”为主线，通过 ${scenes.length} 个分镜推进故事节奏。画面建议采用“${style.name}”风格，并以 ${leadNames} 为核心完成一支可直接提交生成的视频草稿。`;
-  const storyText = scenes.map((scene, index) => `分镜${index + 1}：${scene.title}\n${scene.prompt}\n字幕：${scene.subtitle}`).join("\n\n");
+  const summary = `这个视频以“${clean}”为主线，通过 ${scenes.length} 个分镜推进故事节奏。画面建议采用“${style?.name || "默认风格"}”风格，并以 ${leadNames} 为核心完成一支可直接提交生成的视频草稿。`;
+  const storyText = buildStoryDocument(summary, scenes);
   return { summary, storyText, scenes };
+}
+
+function buildStoryDocument(summary, scenes) {
+  const roleMap = new Map();
+  scenes.forEach((scene) => {
+    charactersByIds(scene.characterIds || []).forEach((character) => {
+      if (!roleMap.has(character.id)) roleMap.set(character.id, character);
+    });
+  });
+  const roleLines = roleMap.size
+    ? Array.from(roleMap.values()).map((character, index) => `${index + 1}. ${character.name}：${character.description || "待补充角色描述"}`).join("\n")
+    : "1. 暂无角色设定，请从右侧角色库补充。";
+  const sceneLines = scenes.map((scene, index) => {
+    const block = [
+      `分镜${index + 1}：${scene.title || `分镜 ${index + 1}`}`,
+      scene.prompt || "",
+    ];
+    if (scene.subtitle) block.push(`字幕：${scene.subtitle}`);
+    return block.filter(Boolean).join("\n");
+  }).join("\n\n");
+  return `【内容概览】\n${summary || "待补充视频概览。"}\n\n【角色列表】\n${roleLines}\n\n【分镜脚本】\n${sceneLines || "待生成分镜脚本。"}`;
+}
+
+function documentSummary(text) {
+  const clean = (text || "").trim();
+  if (!clean) return state.storySummary || "";
+  const summaryMatch = clean.match(/【内容概览】\s*([\s\S]*?)(?:\n\s*【|$)/);
+  if (summaryMatch?.[1]) return summaryMatch[1].trim();
+  return clean.split("\n").find((line) => line.trim()) || "";
 }
 
 function renderAssistantThread() {
@@ -373,17 +443,16 @@ function renderAssistantPlan() {
     return;
   }
   plan.innerHTML = `
-    <div class="assistant-card">
-      <h3>策划案已生成</h3>
-      <div class="assistant-card__meta">${styleById(state.visualStyleId).name} · ${state.scenes.length} 个分镜 · ${state.aspectRatio}</div>
-      <div class="assistant-card__summary">${state.storySummary}</div>
-    </div>
+      <div class="assistant-card">
+        <h3>策划案已生成</h3>
+        <div class="assistant-card__meta">${styleById(state.visualStyleId)?.name || "默认风格"} · ${state.scenes.length} 个分镜 · ${state.aspectRatio || "未设置比例"}</div>
+        <div class="assistant-card__summary">${state.storySummary}</div>
+      </div>
   `;
 }
 
 function renderStoryEditors() {
-  if ($("story_summary")) $("story_summary").value = state.storySummary;
-  if ($("story_text")) $("story_text").value = state.storyText;
+  if ($("story_document")) $("story_document").value = state.storyText;
 }
 
 function renderSceneSummary() {
@@ -464,17 +533,18 @@ function renderResourceNote() {
   const voice = selectedVoice();
   const music = selectedMusic();
   const provider = selectedProvider();
-  note.textContent = `已选画风：${styleById(state.visualStyleId).name}；角色：${state.characterIds.length} 个；提供商：${provider ? provider.display_name : "未配置"}；配音：${voice ? voice.name : "未选"}；音乐：${music ? music.name : "未选"}。`;
+  note.textContent = `已选画风：${styleById(state.visualStyleId)?.name || "未选"}；角色：${state.characterIds.length} 个；提供商：${provider ? provider.display_name : "未配置"}；配音：${voice ? voice.name : "未选"}；音乐：${music ? music.name : "未选"}。`;
 }
 
 function renderVisualTab() {
+  const visuals = materialsOf("visuals");
   return `
     <div class="panel-section">
       <h3>素材</h3>
       <div class="resource-grid">
-        ${mockVisualStyles.map((item) => `
+        ${visuals.map((item) => `
           <article class="resource-card ${state.visualStyleId === item.id ? "is-selected" : ""}" data-style-id="${item.id}">
-            <div class="resource-card__media ${item.mediaClass || ""}"></div>
+            ${imageThumb(item.cover_url || item.public_url, item.name)}
             <strong>${item.name}</strong>
             <span>${item.description}</span>
           </article>
@@ -490,6 +560,8 @@ function renderVisualTab() {
           <option value="9:16" ${state.aspectRatio === "9:16" ? "selected" : ""}>9:16</option>
           <option value="1:1" ${state.aspectRatio === "1:1" ? "selected" : ""}>1:1</option>
           <option value="4:3" ${state.aspectRatio === "4:3" ? "selected" : ""}>4:3</option>
+          <option value="3:4" ${state.aspectRatio === "3:4" ? "selected" : ""}>3:4</option>
+          <option value="21:9" ${state.aspectRatio === "21:9" ? "selected" : ""}>21:9</option>
         </select>
       </div>
       <div class="setting-card" style="margin-top:12px;">
@@ -507,9 +579,9 @@ function renderVisualTab() {
 }
 
 function renderCharacterTab() {
-  const scopeList = mockCharacters[state.characterScope];
+  const scopeList = materialsOf("characters").filter((item) => Boolean(item.is_public) === (state.characterScope === "public"));
   const query = state.searches.character.trim().toLowerCase();
-  const list = scopeList.filter((item) => !query || `${item.name}${item.note}`.toLowerCase().includes(query));
+  const list = scopeList.filter((item) => !query || `${item.name}${item.description || ""}`.toLowerCase().includes(query));
   return `
     <div class="panel-section">
       <h3>角色选择列表</h3>
@@ -525,9 +597,11 @@ function renderCharacterTab() {
       <div class="character-grid">
         ${list.map((item) => `
           <article class="character-card ${state.characterIds.includes(item.id) ? "is-selected" : ""}" data-character-id="${item.id}">
-            <div class="character-card__media ${item.mediaClass || ""}"></div>
+            <div class="character-card__media character-card__media--image">
+              ${item.image_url || item.public_url ? `<img src="${item.image_url || item.public_url}" alt="${item.name}" loading="lazy" />` : '<div class="character-card__placeholder">无预览</div>'}
+            </div>
             <strong>${item.name}</strong>
-            <span>${item.note}</span>
+            <span>${item.description || ""}</span>
           </article>
         `).join("")}
       </div>
@@ -537,29 +611,20 @@ function renderCharacterTab() {
 
 function renderVoiceTab() {
   const query = state.searches.voice.trim().toLowerCase();
-  const list = mockVoices.filter((item) => {
-    const matchesFilter = state.voiceFilter === "全部" || item.type === state.voiceFilter;
-    const matchesQuery = !query || `${item.name}${item.tone}`.toLowerCase().includes(query);
-    return matchesFilter && matchesQuery;
-  });
+  const list = materialsOf("voices").filter((item) => !query || `${item.name}${item.tone || ""}${item.description || ""}`.toLowerCase().includes(query));
   return `
     <div class="panel-section">
       <h3>配音库</h3>
       <input class="search-input" id="voice_search" placeholder="搜索音色名称" value="${state.searches.voice}" />
-    </div>
-    <div class="panel-section">
-      <div class="filter-row">
-        ${["热门", "最新", "推荐", "全部"].map((filter) => `<button class="filter-chip ${state.voiceFilter === filter ? "is-active" : ""}" data-voice-filter="${filter}">${filter}</button>`).join("")}
-      </div>
     </div>
     <div class="voice-list">
       ${list.map((item) => `
         <article class="voice-item ${state.voiceId === item.id ? "is-selected" : ""}" data-voice-id="${item.id}">
           <div class="voice-item__meta">
             <strong>${item.name}</strong>
-            <span>${item.tone}</span>
+            <span>${item.tone || item.description || ""}</span>
           </div>
-          <span>${item.type}</span>
+          ${audioPreview(item.audio_url)}
         </article>
       `).join("")}
     </div>
@@ -568,11 +633,7 @@ function renderVoiceTab() {
 
 function renderMusicTab() {
   const query = state.searches.music.trim().toLowerCase();
-  const list = mockMusic.filter((item) => {
-    const matchesFilter = state.musicFilter === "全部" || item.type === state.musicFilter;
-    const matchesQuery = !query || `${item.name}${item.author}`.toLowerCase().includes(query);
-    return matchesFilter && matchesQuery;
-  });
+  const list = materialsOf("music").filter((item) => !query || `${item.name}${item.author || ""}${item.genre_tags || ""}`.toLowerCase().includes(query));
   return `
     <div class="panel-section">
       <h3>音乐素材库</h3>
@@ -588,19 +649,15 @@ function renderMusicTab() {
         <input id="bgm_volume" type="number" value="${state.bgmVolume}" step="0.05" min="0" max="2" />
       </div>
     </div>
-    <div class="panel-section">
-      <div class="filter-row">
-        ${["推荐音乐", "热门", "全部"].map((filter) => `<button class="filter-chip ${state.musicFilter === filter ? "is-active" : ""}" data-music-filter="${filter}">${filter}</button>`).join("")}
-      </div>
-    </div>
     <div class="music-list">
       ${list.map((item) => `
         <article class="music-item ${state.musicId === item.id ? "is-selected" : ""}" data-music-id="${item.id}">
           <div class="music-item__meta">
             <strong>${item.name}</strong>
-            <span>${item.author} · ${item.duration}</span>
+            <span>${item.author || "未知作者"}${item.duration_ms ? ` · ${Math.round(item.duration_ms / 1000)}s` : ""}</span>
           </div>
-          <span>${item.type}</span>
+          <span>${item.genre_tags || item.description || ""}</span>
+          ${audioPreview(item.audio_url)}
         </article>
       `).join("")}
     </div>
@@ -689,6 +746,7 @@ function toggleCharacterSelection(id) {
   }
   const scene = state.scenes[state.activeSceneIndex];
   if (scene) {
+    scene.characterIds = scene.characterIds || [];
     if (scene.characterIds.includes(id)) {
       scene.characterIds = scene.characterIds.filter((item) => item !== id);
     } else {
@@ -699,20 +757,26 @@ function toggleCharacterSelection(id) {
 
 function buildStoryboardPayload() {
   const template = platformTemplates.find((item) => item.id === state.templateId) || null;
-  const aspectMap = {
-    "16:9": { width: 1280, height: 720 },
-    "9:16": { width: 720, height: 1280 },
-    "1:1": { width: 1080, height: 1080 },
-    "4:3": { width: 1280, height: 960 },
-  };
-  const aspect = aspectMap[state.aspectRatio] || aspectMap["16:9"];
+  const aspect = aspectDimensions(state.aspectRatio || inferAspectRatio(template?.width, template?.height));
   const style = styleById(state.visualStyleId);
+  const storyText = $("story_document")?.value || state.storyText;
+  const storySummary = documentSummary(storyText);
   return {
     template_id: state.templateId || null,
-    width: template ? template.width : aspect.width,
-    height: template ? template.height : aspect.height,
+    width: aspect.width,
+    height: aspect.height,
+    aspect_ratio: state.aspectRatio || inferAspectRatio(aspect.width, aspect.height),
     duration_s: state.scenes.reduce((sum, scene) => sum + Number(scene.duration_s || 0), 0) || (template ? template.duration_s : 15),
-    style: `${style.styleText}; scene type: ${state.sceneType}; selected voice: ${selectedVoice()?.name || "none"}; selected music: ${selectedMusic()?.name || "none"}`,
+    scene_type: state.sceneType,
+    story_summary: storySummary,
+    story_text: storyText,
+    visual_asset_id: state.visualStyleId || null,
+    visual_style_id: state.visualStyleId || null,
+    style_prompt: style?.prompt_fragment || "",
+    character_ids: [...state.characterIds],
+    voice_id: state.voiceId || null,
+    music_id: state.musicId || null,
+    style: style?.prompt_fragment || "",
     subtitles: state.subtitles,
     bgm_volume: Number(state.bgmVolume),
     scenes: state.scenes.map((scene) => ({
@@ -720,6 +784,9 @@ function buildStoryboardPayload() {
       prompt: scene.prompt || "",
       subtitle: scene.subtitle || "",
       title: scene.title || "",
+      visual_asset_id: scene.visual_asset_id || state.visualStyleId || null,
+      character_ids: scene.characterIds || [],
+      character_prompt_fragments: charactersByIds(scene.characterIds || []).map((item) => item.prompt_fragment).filter(Boolean),
     })),
   };
 }
@@ -780,10 +847,10 @@ async function watchJob(jobId) {
 }
 
 async function submitJob() {
-  state.storySummary = $("story_summary")?.value || state.storySummary;
-  state.storyText = $("story_text")?.value || state.storyText;
+  state.storyText = $("story_document")?.value || state.storyText;
+  state.storySummary = documentSummary(state.storyText);
   if (!state.provider) {
-    window.alert("当前没有可用 Provider，请先到“提供商配置”页完成配置并启用。");
+    window.alert("当前没有可用 Provider。");
     return;
   }
   if (!state.scenes.length) {
@@ -820,6 +887,31 @@ async function submitJob() {
     log(`ERROR: ${error.message}`);
     window.alert(`生成失败：${error.message}`);
   }
+}
+
+function syncMaterialSelections() {
+  const visuals = materialsOf("visuals");
+  const characters = materialsOf("characters");
+  const voices = materialsOf("voices");
+  const music = materialsOf("music");
+
+  if (!state.visualStyleId || !visuals.some((item) => item.id === state.visualStyleId)) {
+    state.visualStyleId = visuals[0]?.id || "";
+  }
+  state.characterIds = state.characterIds.filter((id) => characters.some((item) => item.id === id));
+  if (!state.voiceId || !voices.some((item) => item.id === state.voiceId)) {
+    state.voiceId = voices[0]?.id || "";
+  }
+  if (!state.musicId || !music.some((item) => item.id === state.musicId)) {
+    state.musicId = music[0]?.id || "";
+  }
+}
+
+function applyTemplateDefaults() {
+  const template = platformTemplates.find((item) => item.id === state.templateId) || platformTemplates[0] || null;
+  if (!template) return;
+  state.templateId = template.id;
+  state.aspectRatio = inferAspectRatio(template.width, template.height);
 }
 
 function attachStudioEvents() {
@@ -898,8 +990,10 @@ function attachStudioEvents() {
       renderSceneSummary();
       return;
     }
-    if (event.target.id === "story_summary") state.storySummary = event.target.value;
-    if (event.target.id === "story_text") state.storyText = event.target.value;
+    if (event.target.id === "story_document") {
+      state.storyText = event.target.value;
+      state.storySummary = documentSummary(state.storyText);
+    }
     if (event.target.id === "character_search") {
       state.searches.character = event.target.value;
       renderResourcePanel();
@@ -926,6 +1020,8 @@ function attachStudioEvents() {
     }
     if (event.target.id === "template_id") {
       state.templateId = event.target.value;
+      applyTemplateDefaults();
+      renderResourcePanel();
     }
     if (event.target.id === "subtitles") {
       state.subtitles = event.target.checked;
@@ -939,18 +1035,22 @@ function attachStudioEvents() {
 async function initStudio() {
   setGlobalStatus("初始化中", "idle");
   try {
+    const materials = await fetchMaterials();
+    Object.assign(materialLibrary, materials);
     [platformTemplates, availableProviders, providerConfigs] = await Promise.all([
       fetchPlatformTemplates(),
       fetchProviders(),
       fetchProviderConfigs(),
     ]);
     state.templateId = platformTemplates[0]?.id || "";
+    applyTemplateDefaults();
     state.provider = availableProviders[0]?.provider_code || "";
+    syncMaterialSelections();
     renderAll();
     attachStudioEvents();
     if (!availableProviders.length) {
       setGlobalStatus("暂无可用 Provider", "error");
-      if ($("job_hint")) $("job_hint").textContent = "当前没有已启用且校验通过的 Provider，请先到“提供商配置”页完成配置。";
+      if ($("job_hint")) $("job_hint").textContent = "当前没有已启用且校验通过的 Provider。";
     } else {
       setGlobalStatus("空闲中", "idle");
     }
@@ -1189,7 +1289,7 @@ function renderProviderConfigCard(config) {
   const credentials = fields.filter((field) => field.key === "app_key" || field.key === "app_secret");
   const requestFields = fields.filter((field) => field.key === "req_key" || field.key === "base_url");
   const modeFields = fields.filter((field) => field.key === "mock_mode");
-  const statusText = config.is_valid ? "配置已校验，可以直接在工作区使用。" : (config.last_error || "配置还未通过校验。");
+  const statusText = config.is_valid ? "当前配置已校验，可作为工作区可选的视频提供商。" : (config.last_error || "当前配置尚未通过校验。");
   const renderField = (field) => `
     <label class="provider-field">
       <span>${field.label}</span>
@@ -1203,9 +1303,9 @@ function renderProviderConfigCard(config) {
     <article class="provider-card provider-card--jimeng" data-provider-code="${config.provider_code}">
       <div class="provider-card__head">
         <div class="provider-card__title">
-          <div class="provider-card__badge">云端视频 Provider</div>
+          <div class="provider-card__badge">视频提供商</div>
           <h3>${config.display_name}</h3>
-          <p>${config.description || ""}</p>
+          <p>${config.description || "管理该视频提供商的凭证、默认请求参数与启用状态。"}</p>
         </div>
         <div class="provider-card__status">
           <span class="task-card__badge task-card__badge--${config.is_valid ? "done" : "error"}">${config.is_valid ? "已校验" : "待配置"}</span>
@@ -1217,7 +1317,7 @@ function renderProviderConfigCard(config) {
         <div class="provider-card__row">
           <label class="setting-toggle provider-card__toggle">
             <input type="checkbox" data-provider-toggle="${config.provider_code}" ${config.enabled ? "checked" : ""} />
-            <span>启用即梦作为当前可选 Provider</span>
+            <span>启用为工作区可选视频提供商</span>
           </label>
           <div class="provider-card__meta">
             <span>Provider Code：${config.provider_code}</span>
@@ -1228,7 +1328,7 @@ function renderProviderConfigCard(config) {
         <section class="provider-section">
           <div class="provider-section__head">
             <strong>基础凭证</strong>
-            <span>保存即梦的账号鉴权信息</span>
+            <span>用于保存该视频提供商的账号鉴权信息</span>
           </div>
           <div class="provider-form provider-form--two-col">
             ${credentials.map(renderField).join("")}
@@ -1238,7 +1338,7 @@ function renderProviderConfigCard(config) {
         <section class="provider-section">
           <div class="provider-section__head">
             <strong>请求参数</strong>
-            <span>控制默认 req_key 和接口访问地址</span>
+            <span>用于管理默认 req_key 和接口访问地址</span>
           </div>
           <div class="provider-form provider-form--two-col">
             ${requestFields.map(renderField).join("")}
@@ -1268,11 +1368,226 @@ function renderProviderConfigCard(config) {
 function renderProvidersPage() {
   const list = $("providers_list");
   if (!list) return;
-  if (!providerConfigs.length) {
+  if (activeConfigTab !== "providers") {
+    list.innerHTML = "";
+    return;
+  }
+  const visibleConfigs = providerConfigs.filter((item) => item.provider_code === activeConfigSection);
+  if (!visibleConfigs.length) {
     list.innerHTML = '<div class="tasks-empty"><h3>暂无 Provider 定义</h3><p>后端未返回任何 Provider 配置项。</p></div>';
     return;
   }
-  list.innerHTML = providerConfigs.map(renderProviderConfigCard).join("");
+  list.innerHTML = visibleConfigs.map(renderProviderConfigCard).join("");
+}
+
+function materialTypeLabel(type) {
+  return {
+    visuals: "画面素材",
+    characters: "角色素材",
+    voices: "配音素材",
+    music: "音乐素材",
+  }[type] || type;
+}
+
+function materialDraft(type) {
+  const draftId = globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2, 10);
+  const base = { id: `draft-${draftId}`, name: "未命名素材", description: "", prompt_fragment: "", enabled: true, sort_order: 100, __draft: true };
+  if (type === "visuals") return { ...base };
+  if (type === "characters") return { ...base, is_public: true };
+  if (type === "voices") return { ...base, tone: "" };
+  return { ...base, author: "", genre_tags: "" };
+}
+
+function materialFileAccept(type) {
+  return type === "visuals" || type === "characters" ? "image/*" : "audio/*";
+}
+
+function renderMaterialPreview(type, item) {
+  if (type === "visuals") return imageThumb(item.cover_url || item.public_url, item.name);
+  if (type === "characters") return imageThumb(item.image_url || item.public_url, item.name);
+  return audioPreview(item.audio_url || item.public_url);
+}
+
+function renderMaterialFields(type, item, prefix) {
+  const fields = [
+    `<div class="material-asset-preview">${renderMaterialPreview(type, item)}</div>`,
+    `
+      <label class="provider-field">
+        <span>名称</span>
+        <input type="text" data-material-field="${prefix}:name" value="${item.name || ""}" />
+      </label>
+    `,
+    `
+      <label class="provider-field">
+        <span>描述</span>
+        <input type="text" data-material-field="${prefix}:description" value="${item.description || ""}" />
+      </label>
+    `,
+    `
+      <label class="provider-field">
+        <span>Prompt 片段</span>
+        <input type="text" data-material-field="${prefix}:prompt_fragment" value="${item.prompt_fragment || ""}" />
+      </label>
+    `,
+    `
+      <label class="provider-field">
+        <span>${type === "visuals" || type === "characters" ? "上传图片" : "上传音频"}</span>
+        <input type="file" accept="${materialFileAccept(type)}" data-material-file="${prefix}" />
+      </label>
+    `,
+    `
+      <label class="provider-field">
+        <span>排序</span>
+        <input type="number" data-material-field="${prefix}:sort_order" value="${item.sort_order || 100}" />
+      </label>
+    `,
+  ];
+  if (type === "characters") {
+    fields.push(`
+      <label class="setting-toggle provider-card__toggle">
+        <input type="checkbox" data-material-field="${prefix}:is_public" ${item.is_public ? "checked" : ""} />
+        <span>公共角色</span>
+      </label>
+    `);
+  }
+  if (type === "voices") {
+    fields.push(`
+      <label class="provider-field">
+        <span>音色标签</span>
+        <input type="text" data-material-field="${prefix}:tone" value="${item.tone || ""}" />
+      </label>
+    `);
+  }
+  if (type === "music") {
+    fields.push(`
+      <label class="provider-field">
+        <span>作者</span>
+        <input type="text" data-material-field="${prefix}:author" value="${item.author || ""}" />
+      </label>
+    `);
+    fields.push(`
+      <label class="provider-field">
+        <span>风格标签</span>
+        <input type="text" data-material-field="${prefix}:genre_tags" value="${item.genre_tags || ""}" />
+      </label>
+    `);
+  }
+  fields.push(`
+    <label class="setting-toggle provider-card__toggle">
+      <input type="checkbox" data-material-field="${prefix}:enabled" ${item.enabled ? "checked" : ""} />
+      <span>启用</span>
+    </label>
+  `);
+  return fields.join("");
+}
+
+function renderMaterialConfigPanel() {
+  const panel = $("materials_config_panel");
+  if (!panel) return;
+  if (activeConfigTab !== "materials") {
+    panel.innerHTML = "";
+    return;
+  }
+  const items = [...(pendingMaterialDrafts[activeConfigSection] || []), ...(materialConfigs[activeConfigSection] || [])];
+  panel.innerHTML = `
+    <div class="tasks-board__head tasks-board__head--compact">
+      <div>
+        <strong>${materialTypeLabel(activeConfigSection)}</strong>
+        <p>工作台中的候选项直接读取这里保存的数据。</p>
+      </div>
+      <button class="btn btn--primary" type="button" data-material-create="${activeConfigSection}">新增</button>
+    </div>
+    <div class="materials-config-list">
+      ${items.length ? items.map((item) => `
+        <article class="provider-card provider-card--material">
+          <div class="provider-card__head">
+            <div class="provider-card__title">
+              <div class="provider-card__badge">${materialTypeLabel(activeConfigSection)}</div>
+              <h3>${item.name}</h3>
+              <p>${item.description || "未填写描述"}</p>
+            </div>
+          </div>
+          <div class="provider-card__surface">
+            <div class="provider-form provider-form--two-col">
+              ${renderMaterialFields(activeConfigSection, item, `${activeConfigSection}:${item.id}`)}
+            </div>
+          </div>
+          <div class="provider-card__actions">
+            <button class="btn btn--ghost" type="button" data-material-save="${activeConfigSection}:${item.id}:${item.__draft ? "draft" : "persisted"}">${item.__draft ? "创建素材" : "保存"}</button>
+            <button class="btn btn--danger" type="button" data-material-delete="${activeConfigSection}:${item.id}:${item.__draft ? "draft" : "persisted"}">删除</button>
+          </div>
+          <p class="provider-card__error" id="material_error_${activeConfigSection}_${item.id}"></p>
+        </article>
+      `).join("") : '<div class="tasks-empty"><h3>暂无素材</h3><p>点击新增，创建可供工作台选择的素材项。</p></div>'}
+    </div>
+  `;
+}
+
+function renderConfigSidebar() {
+  const nav = $("config_sidebar_nav");
+  const title = $("config_sidebar_title");
+  if (!nav || !title) return;
+  const items = activeConfigTab === "providers"
+    ? providerConfigs.map((item) => ({ id: item.provider_code, label: item.display_name }))
+    : [
+        { id: "visuals", label: "画面" },
+        { id: "characters", label: "角色" },
+        { id: "voices", label: "配音" },
+        { id: "music", label: "音乐" },
+      ];
+  title.textContent = activeConfigTab === "providers" ? "视频提供商" : "素材配置";
+  nav.innerHTML = items.map((item) => `
+    <button
+      class="settings-sidebar__item ${activeConfigSection === item.id ? "is-active" : ""}"
+      data-config-section="${item.id}"
+      type="button"
+    >
+      ${item.label}
+    </button>
+  `).join("");
+}
+
+function renderConfigPanels() {
+  const providersList = $("providers_list");
+  const materialsPanel = $("materials_config_panel");
+  const title = $("config_content_title");
+  const description = $("config_content_description");
+  const providersRefresh = $("providers_refresh");
+  const materialsRefresh = $("materials_refresh");
+  if (!providersList || !materialsPanel || !title || !description) return;
+
+  document.querySelectorAll(".settings-primary-tab").forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.configTab === activeConfigTab);
+  });
+
+  renderConfigSidebar();
+
+  if (activeConfigTab === "providers") {
+    if (!providerConfigs.some((item) => item.provider_code === activeConfigSection)) {
+      activeConfigSection = providerConfigs[0]?.provider_code || "jimeng";
+    }
+    providersList.hidden = false;
+    materialsPanel.hidden = true;
+    materialsPanel.innerHTML = "";
+    if (providersRefresh) providersRefresh.hidden = false;
+    if (materialsRefresh) materialsRefresh.hidden = true;
+    title.textContent = "视频提供商";
+    description.textContent = "管理视频生成厂商的启用状态、鉴权信息与默认请求参数。";
+    renderProvidersPage();
+    return;
+  }
+
+  if (!["visuals", "characters", "voices", "music"].includes(activeConfigSection)) {
+    activeConfigSection = "visuals";
+  }
+  providersList.hidden = true;
+  materialsPanel.hidden = false;
+  providersList.innerHTML = "";
+  if (providersRefresh) providersRefresh.hidden = true;
+  if (materialsRefresh) materialsRefresh.hidden = false;
+  title.textContent = materialTypeLabel(activeConfigSection);
+  description.textContent = "维护工作区使用的素材定义。工作区只负责选择，配置在这里集中完成。";
+  renderMaterialConfigPanel();
 }
 
 function collectProviderForm(providerCode) {
@@ -1296,10 +1611,28 @@ async function loadProviderConfigsIntoState() {
   availableProviders = await fetchProviders();
 }
 
-async function initProvidersPage() {
+function collectMaterialForm(type, id) {
+  const payload = {};
+  document.querySelectorAll(`[data-material-field^="${type}:${id}:"]`).forEach((node) => {
+    const field = node.dataset.materialField.split(":").slice(2).join(":");
+    payload[field] = node.type === "checkbox" ? node.checked : node.value.trim();
+  });
+  payload.sort_order = Number(payload.sort_order || 100);
+  return payload;
+}
+
+function collectMaterialFile(type, id) {
+  const node = document.querySelector(`[data-material-file="${type}:${id}"]`);
+  return node?.files?.[0] || null;
+}
+
+async function initConfigCenter() {
   try {
     await loadProviderConfigsIntoState();
-    renderProvidersPage();
+    materialConfigs = await fetchMaterialConfigs();
+    activeConfigTab = "providers";
+    activeConfigSection = providerConfigs[0]?.provider_code || "jimeng";
+    renderConfigPanels();
   } catch (error) {
     const list = $("providers_list");
     if (list) {
@@ -1312,16 +1645,38 @@ async function initProvidersPage() {
     await loadProviderConfigsIntoState();
     renderProvidersPage();
   });
+  $("materials_refresh")?.addEventListener("click", async () => {
+    materialConfigs = await fetchMaterialConfigs();
+    renderMaterialConfigPanel();
+  });
 
   document.addEventListener("click", async (event) => {
     if (!pageIsProviders()) return;
+    const configTabButton = event.target.closest("[data-config-tab]");
+    const configSectionButton = event.target.closest("[data-config-section]");
     const validateButton = event.target.closest("[data-provider-validate]");
     const saveButton = event.target.closest("[data-provider-save]");
-    if (!validateButton && !saveButton) return;
+    const materialCreateButton = event.target.closest("[data-material-create]");
+    const materialSaveButton = event.target.closest("[data-material-save]");
+    const materialDeleteButton = event.target.closest("[data-material-delete]");
+    if (configTabButton) {
+      activeConfigTab = configTabButton.dataset.configTab;
+      activeConfigSection = activeConfigTab === "providers"
+        ? (providerConfigs[0]?.provider_code || "jimeng")
+        : "visuals";
+      renderConfigPanels();
+      return;
+    }
+    if (configSectionButton) {
+      activeConfigSection = configSectionButton.dataset.configSection;
+      renderConfigPanels();
+      return;
+    }
+    if (!validateButton && !saveButton && !materialCreateButton && !materialSaveButton && !materialDeleteButton) return;
 
     const providerCode = validateButton?.dataset.providerValidate || saveButton?.dataset.providerSave;
-    const payload = collectProviderForm(providerCode);
-    const errorNode = $(`provider_error_${providerCode}`);
+    const payload = providerCode ? collectProviderForm(providerCode) : null;
+    const errorNode = providerCode ? $(`provider_error_${providerCode}`) : null;
     if (errorNode) errorNode.textContent = "";
 
     try {
@@ -1334,8 +1689,42 @@ async function initProvidersPage() {
         await loadProviderConfigsIntoState();
         renderProvidersPage();
       }
+      if (materialCreateButton) {
+        const type = materialCreateButton.dataset.materialCreate;
+        pendingMaterialDrafts[type].unshift(materialDraft(type));
+        renderMaterialConfigPanel();
+      }
+      if (materialSaveButton) {
+        const [type, id, mode] = materialSaveButton.dataset.materialSave.split(":");
+        const payload = collectMaterialForm(type, id);
+        const file = collectMaterialFile(type, id);
+        if (mode === "draft") {
+          if (!file) throw new Error("新增素材必须上传文件");
+          await createMaterialConfig(type, payload, file);
+          pendingMaterialDrafts[type] = pendingMaterialDrafts[type].filter((item) => item.id !== id);
+        } else {
+          await updateMaterialConfig(type, id, payload, file);
+        }
+        materialConfigs = await fetchMaterialConfigs();
+        renderMaterialConfigPanel();
+      }
+      if (materialDeleteButton) {
+        const [type, id, mode] = materialDeleteButton.dataset.materialDelete.split(":");
+        if (mode === "draft") {
+          pendingMaterialDrafts[type] = pendingMaterialDrafts[type].filter((item) => item.id !== id);
+        } else {
+          await deleteMaterialConfig(type, id);
+          materialConfigs = await fetchMaterialConfigs();
+        }
+        renderMaterialConfigPanel();
+      }
     } catch (error) {
       if (errorNode) errorNode.textContent = error.message;
+      if (materialSaveButton || materialDeleteButton) {
+        const [type, id] = (materialSaveButton?.dataset.materialSave || materialDeleteButton?.dataset.materialDelete).split(":");
+        const node = $(`material_error_${type}_${id}`);
+        if (node) node.textContent = error.message;
+      }
     }
   });
 }
@@ -1353,5 +1742,5 @@ if (pageIsTaskDetail()) {
 }
 
 if (pageIsProviders()) {
-  initProvidersPage();
+  initConfigCenter();
 }
