@@ -22,9 +22,10 @@ WORKDIR /app
 RUN groupadd --gid 1000 appgroup && \
     useradd --uid 1000 --gid appgroup --shell /bin/bash --create-home appuser
 
-# Install runtime dependencies only
+# Install runtime dependencies including FFmpeg for video processing
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy Python packages from builder

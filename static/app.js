@@ -113,7 +113,10 @@ async function poll(jobId, onUpdate) {
     log(`status: ${job.status}${job.stage ? ` (${job.stage})` : ""}`);
     $("job_hint").textContent = getProgressHint(job);
     renderJobMeta(job);
-    if (job.status === "running") setGlobalStatus("生成中", "running");
+    if (job.status === "running") {
+      setGlobalStatus("生成中", "running");
+      if (job.stage) setLoading(true, `正在处理：${job.stage}...`);
+    }
     if (job.status === "done") return job;
     if (job.status === "error") throw new Error(job.error || "job failed");
     await sleep(1500);
@@ -408,6 +411,8 @@ $("submit").addEventListener("click", async () => {
     renderJobMeta(null);
     $("job_hint").textContent = "正在提交任务，请稍等...";
     log("creating job...");
+    setLoading(true, "正在上传图片...");
+    
     const res = await fetch("/api/jobs", { method: "POST", body: fd });
     if (!res.ok) {
       throw new Error(await parseErrorResponse(res));
@@ -417,6 +422,7 @@ $("submit").addEventListener("click", async () => {
 
     activeJobId = job_id;
     await refreshJobs();
+    setLoading(true, "正在排队等待渲染...");
 
     log("rendering...");
     $("job_hint").textContent = "任务已提交，正在等待渲染反馈。";
@@ -424,9 +430,14 @@ $("submit").addEventListener("click", async () => {
       if (job && job.job_id) {
         activeJobId = job.job_id;
         await refreshJobs();
+        // Update loading text with stage info
+        if (job.stage) {
+          setLoading(true, `正在处理：${job.stage}...`);
+        }
       }
     });
 
+    setLoading(false);
     await selectJob(job_id);
     log("done");
   } catch (e) {
@@ -435,5 +446,30 @@ $("submit").addEventListener("click", async () => {
     log("ERROR: " + (e && e.message ? e.message : String(e)));
     $("job_hint").textContent = "生成失败，请查看下方日志。";
     alert("Failed: " + (e && e.message ? e.message : String(e)));
+    setLoading(false);
   }
+});
+
+// --- Loading States & Progress Indicators ---
+
+function setLoading(isLoading, message) {
+  const overlay = document.getElementById('loading_overlay');
+  const textEl = document.getElementById('loading_text');
+  const submitBtn = document.getElementById('submit');
+  
+  if (!overlay) return;
+  
+  if (isLoading) {
+    overlay.style.display = 'flex';
+    if (textEl && message) textEl.textContent = message || '处理中...';
+    if (submitBtn) submitBtn.disabled = true;
+  } else {
+    overlay.style.display = 'none';
+    if (submitBtn) submitBtn.disabled = false;
+  }
+}
+
+$("submit").addEventListener("click", function() {
+  this.disabled = true;
+  setTimeout(() => this.disabled = false, 2000); // Basic debounce
 });

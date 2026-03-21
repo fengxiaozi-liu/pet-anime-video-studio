@@ -5,6 +5,12 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
     container_name: pet-anime-video
     restart: unless-stopped
     
@@ -38,13 +44,6 @@ services:
       
       # Python Environment
       - PYTHONUNBUFFERED=1
-    
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
     
     # Resource limits
     deploy:

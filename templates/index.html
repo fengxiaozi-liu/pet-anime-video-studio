@@ -157,7 +157,13 @@
             </div>
           </div>
 
-          <div class="preview preview--large">
+          <div class="preview preview--large" style="position: relative;">
+            <div id="loading_overlay" style="display: none;">
+              <div id="loading_content">
+                <div class="loading-spinner"></div>
+                <div id="loading_text" class="muted">处理中...</div>
+              </div>
+            </div>
             <video id="video" controls style="width: 100%; display: none;"></video>
             <div id="preview_placeholder" class="preview__placeholder muted">生成完成后将自动显示预览</div>
           </div>
