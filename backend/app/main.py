@@ -151,7 +151,7 @@ async def create_job(
     _user: str = Depends(authenticated_endpoint),
     prompt: str = Form(""),
     storyboard_json: str | None = Form(None),
-    backend: Literal["auto", "local", "cloud"] = Form("auto"),
+    backend: Literal["auto", "local", "cloud"] = Form("cloud"),
     provider: Literal["kling", "openai", "gemini", "doubao"] = Form("kling"),
     template_id: str | None = Form(None),
     subtitles: bool = Form(True),
@@ -159,12 +159,12 @@ async def create_job(
     bgm: UploadFile | None = File(default=None),
     images: list[UploadFile] = File(default=[]),
 ) -> dict[str, Any]:
-    if not images:
-        raise HTTPException(status_code=400, detail="Please upload at least one image.")
     if len(images) > 12:
         raise HTTPException(status_code=400, detail="Please upload at most 12 images per job.")
     if not (0.0 <= bgm_volume <= 2.0):
         raise HTTPException(status_code=400, detail="bgm_volume must be between 0.0 and 2.0.")
+    if not images and backend != "cloud":
+        raise HTTPException(status_code=400, detail="Image-free generation currently requires backend=cloud.")
 
     job_id = str(uuid.uuid4())
     job_dir = UPLOAD_DIR / job_id

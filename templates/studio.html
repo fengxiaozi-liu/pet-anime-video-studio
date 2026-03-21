@@ -28,20 +28,6 @@
 
           <div class="assistant-plan" id="assistant_plan"></div>
 
-          <div class="assistant-library">
-            <label for="images">参考图片</label>
-            <input id="images" type="file" accept="image/*" multiple />
-            <div class="field-hint">至少上传 1 张图片，最多 12 张。</div>
-          </div>
-
-          <div class="assistant-library">
-            <label for="videos">视频素材库（可选上传）</label>
-            <input id="videos" type="file" accept="video/*" multiple />
-            <div class="field-hint">上传后会进入素材资产列表，不阻塞生成。</div>
-          </div>
-
-          <div class="asset-mini-list" id="asset_list"></div>
-
           <div class="assistant-composer">
             <textarea
               id="assistant_prompt"
@@ -81,78 +67,11 @@
 
           <div class="scene-list" id="scene_list"></div>
 
-          <section class="video-settings">
-            <div class="video-settings__head">
-              <div>
-                <div class="eyebrow">视频画面与导出设置</div>
-                <h3>生成前设置</h3>
-              </div>
+          <section class="editor-status-panel">
+            <div class="editor-status-panel__top">
+              <div class="result-status" id="job_hint">还没有任务。先让助手生成一个故事草稿，再在右侧补齐画面、角色、提供商和音频设置。</div>
               <a id="download_result" class="btn btn--ghost is-disabled" href="#" aria-disabled="true">下载结果</a>
             </div>
-
-            <div class="settings-grid">
-              <div class="setting-card">
-                <label for="template_id">平台模板</label>
-                <select id="template_id"></select>
-                <div class="field-hint" id="template_summary">正在加载平台模板...</div>
-              </div>
-
-              <div class="setting-card">
-                <label for="scene_type">分镜类型</label>
-                <select id="scene_type">
-                  <option>智能分镜，图片 4.0，Seedance 1.0</option>
-                  <option>情绪型分镜，图片 4.0，Seedance 1.0</option>
-                  <option>剧情型分镜，图片 3.1，Seedance 1.0</option>
-                </select>
-              </div>
-
-              <div class="setting-card">
-                <label for="aspect_ratio">视频比例</label>
-                <select id="aspect_ratio">
-                  <option value="16:9">16:9 横屏</option>
-                  <option value="9:16">9:16 竖屏</option>
-                  <option value="1:1">1:1 方形</option>
-                  <option value="4:3">4:3 经典</option>
-                </select>
-              </div>
-
-              <div class="setting-card">
-                <label for="bgm">本地 BGM 文件</label>
-                <input id="bgm" type="file" accept="audio/*" />
-                <div class="field-hint">如果选择本地文件，会和右侧音乐推荐共同展示，但仍以本地文件上传为准。</div>
-              </div>
-
-              <div class="setting-card">
-                <label for="bgm_volume">背景音乐音量</label>
-                <input id="bgm_volume" type="number" value="0.25" step="0.05" min="0" max="2" />
-              </div>
-
-              <div class="setting-card">
-                <label for="backend">生成链路</label>
-                <select id="backend">
-                  <option value="auto" selected>auto（云优先→本地兜底）</option>
-                  <option value="local">local（本地）</option>
-                  <option value="cloud">cloud（云）</option>
-                </select>
-              </div>
-
-              <div class="setting-card">
-                <label for="provider">Provider</label>
-                <select id="provider">
-                  <option value="kling" selected>kling（可灵）</option>
-                  <option value="gemini">gemini</option>
-                  <option value="doubao">doubao（豆包）</option>
-                  <option value="openai">openai</option>
-                </select>
-              </div>
-
-              <label class="setting-toggle">
-                <input id="subtitles" type="checkbox" checked />
-                <span>按原文匹配字幕</span>
-              </label>
-            </div>
-
-            <div class="result-status" id="job_hint">还没有任务。先让助手生成一个故事草稿，再上传图片并生成视频。</div>
             <div class="result-meta" id="job_meta"></div>
             <pre class="log-box" id="log"></pre>
           </section>
@@ -164,6 +83,7 @@
           <div class="resource-tabs">
             <button class="resource-tab is-active" data-tab="visual">画面</button>
             <button class="resource-tab" data-tab="character">角色</button>
+            <button class="resource-tab" data-tab="provider">提供商</button>
             <button class="resource-tab" data-tab="voice">配音</button>
             <button class="resource-tab" data-tab="music">音乐</button>
           </div>
@@ -171,7 +91,7 @@
           <div class="resource-panel" id="resource_panel"></div>
 
           <div class="resource-footer">
-            <div class="resource-footer__note" id="resource_note">选择画风、角色、配音和音乐后，再提交生成。</div>
+            <div class="resource-footer__note" id="resource_note">选择画面风格、角色、提供商、配音和音乐后，再提交生成。</div>
             <button id="submit" class="btn btn--dark btn--block">生成视频</button>
           </div>
         </section>

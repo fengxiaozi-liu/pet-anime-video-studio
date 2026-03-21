@@ -83,6 +83,33 @@ const mockMusic = [
   { id: "music-drama", name: "科技未来", author: "Kerandino", duration: "01:59", type: "最新" },
 ];
 
+const mockProviders = [
+  {
+    id: "kling",
+    name: "Kling",
+    note: "适合稳定的故事型视频生成，当前推荐默认选项。",
+    capability: "故事感 / 叙事镜头",
+  },
+  {
+    id: "openai",
+    name: "OpenAI",
+    note: "适合强调语言理解与镜头描述一致性。",
+    capability: "语义理解 / 镜头还原",
+  },
+  {
+    id: "gemini",
+    name: "Gemini",
+    note: "适合做多模态风格探索和快速试验。",
+    capability: "风格探索 / 多模态",
+  },
+  {
+    id: "doubao",
+    name: "Doubao",
+    note: "适合中文场景与本地化表达。",
+    capability: "中文表达 / 本地化",
+  },
+];
+
 const state = {
   assistantPrompt: "",
   storySummary: "",
@@ -97,7 +124,7 @@ const state = {
   sceneType: "智能分镜，图片 4.0，Seedance 1.0",
   subtitles: true,
   bgmVolume: 0.25,
-  backend: "auto",
+  backend: "cloud",
   provider: "kling",
   activeTab: "visual",
   characterScope: "public",
@@ -108,6 +135,7 @@ const state = {
     voice: "",
     music: "",
   },
+  bgmFile: null,
   activeSceneIndex: 0,
   lastJobId: null,
 };
@@ -257,7 +285,7 @@ function uploadWithProgress(formData) {
     xhr.upload.addEventListener("progress", (event) => {
       if (event.lengthComputable) {
         const pct = Math.round((event.loaded / event.total) * 100);
-        showUploadProgress(pct, "正在上传图片...");
+        showUploadProgress(pct, "正在提交生成任务...");
       }
     });
     xhr.addEventListener("load", () => {
@@ -299,44 +327,6 @@ async function fetchPlatformTemplates() {
   if (!res.ok) throw new Error(await parseErrorResponse(res));
   const data = await res.json();
   return data.templates || [];
-}
-
-async function refreshAssetList() {
-  const list = $("asset_list");
-  if (!list) return;
-  try {
-    const res = await fetch("/api/assets?limit=8", { cache: "no-store" });
-    if (!res.ok) throw new Error(await parseErrorResponse(res));
-    const data = await res.json();
-    const items = data.assets || [];
-    if (!items.length) {
-      list.innerHTML = '<div class="field-hint">还没有视频素材，上传后会出现在这里。</div>';
-      return;
-    }
-    list.innerHTML = items
-      .map(
-        (asset) => `
-          <div class="asset-mini-item">
-            <strong>${asset.filename}</strong>
-            <span>${asset.kind} · ${(asset.size / (1024 * 1024)).toFixed(2)} MB</span>
-          </div>
-        `
-      )
-      .join("");
-  } catch (error) {
-    list.innerHTML = `<div class="field-hint">素材列表加载失败：${error.message}</div>`;
-  }
-}
-
-async function uploadVideoAssets(files) {
-  for (const file of files) {
-    const formData = new FormData();
-    formData.append("kind", "video");
-    formData.append("file", file);
-    const res = await fetch("/api/assets", { method: "POST", body: formData });
-    if (!res.ok) throw new Error(await parseErrorResponse(res));
-  }
-  await refreshAssetList();
 }
 
 function renderAssistantThread() {
@@ -477,7 +467,8 @@ function renderResourceNote() {
   if (!note) return;
   const voice = selectedVoice();
   const music = selectedMusic();
-  note.textContent = `已选画风：${styleById(state.visualStyleId).name}；角色：${state.characterIds.length} 个；配音：${voice ? voice.name : "未选"}；音乐：${music ? music.name : "未选"}。`;
+  const provider = mockProviders.find((item) => item.id === state.provider);
+  note.textContent = `已选画风：${styleById(state.visualStyleId).name}；角色：${state.characterIds.length} 个；提供商：${provider ? provider.name : "未选"}；配音：${voice ? voice.name : "未选"}；音乐：${music ? music.name : "未选"}。`;
 }
 
 function renderVisualTab() {
@@ -499,24 +490,20 @@ function renderVisualTab() {
       </div>
     </div>
     <div class="panel-section">
-      <h3>视频画面设置</h3>
+      <h3>画面设置</h3>
       <div class="setting-card">
-        <label for="panel_scene_type">分镜类型</label>
-        <select id="panel_scene_type">
-          <option ${state.sceneType === "智能分镜，图片 4.0，Seedance 1.0" ? "selected" : ""}>智能分镜，图片 4.0，Seedance 1.0</option>
-          <option ${state.sceneType === "情绪分镜，图片 4.0，Seedance 1.0" ? "selected" : ""}>情绪分镜，图片 4.0，Seedance 1.0</option>
-          <option ${state.sceneType === "剧情分镜，图片 3.1，Seedance 1.0" ? "selected" : ""}>剧情分镜，图片 3.1，Seedance 1.0</option>
-        </select>
-      </div>
-      <div class="setting-card" style="margin-top:10px;">
-        <label for="panel_aspect_ratio">视频比例</label>
-        <select id="panel_aspect_ratio">
+        <label for="aspect_ratio">视频比例</label>
+        <select id="aspect_ratio">
           <option value="16:9" ${state.aspectRatio === "16:9" ? "selected" : ""}>16:9</option>
           <option value="9:16" ${state.aspectRatio === "9:16" ? "selected" : ""}>9:16</option>
           <option value="1:1" ${state.aspectRatio === "1:1" ? "selected" : ""}>1:1</option>
           <option value="4:3" ${state.aspectRatio === "4:3" ? "selected" : ""}>4:3</option>
         </select>
       </div>
+      <label class="setting-toggle" style="margin-top:12px;">
+        <input id="subtitles" type="checkbox" ${state.subtitles ? "checked" : ""} />
+        <span>按原文匹配字幕</span>
+      </label>
     </div>
   `;
 }
@@ -545,6 +532,30 @@ function renderCharacterTab() {
                 <div class="character-card__media ${item.mediaClass || ""}"></div>
                 <strong>${item.name}</strong>
                 <span>${item.note}</span>
+              </article>
+            `
+          )
+          .join("")}
+      </div>
+    </div>
+  `;
+}
+
+function renderProviderTab() {
+  return `
+    <div class="panel-section">
+      <h3>提供商</h3>
+      <h4>当前工作台固定走云端链路，选择不同 provider 控制生成模型表现。</h4>
+      <div class="voice-list">
+        ${mockProviders
+          .map(
+            (item) => `
+              <article class="voice-item ${state.provider === item.id ? "is-selected" : ""}" data-provider-id="${item.id}">
+                <div class="voice-item__meta">
+                  <strong>${item.name}</strong>
+                  <span>${item.note}</span>
+                </div>
+                <span>${item.capability}</span>
               </article>
             `
           )
@@ -608,6 +619,17 @@ function renderMusicTab() {
       <input class="search-input" id="music_search" placeholder="搜索歌曲名称 / 歌手" value="${state.searches.music}" />
     </div>
     <div class="panel-section">
+      <div class="setting-card">
+        <label for="bgm">本地 BGM 文件</label>
+        <input id="bgm" type="file" accept="audio/*" />
+        <div class="field-hint">如果选择本地文件，会覆盖右侧已选音乐作为最终 BGM。</div>
+      </div>
+      <div class="setting-card" style="margin-top:10px;">
+        <label for="bgm_volume">背景音乐音量</label>
+        <input id="bgm_volume" type="number" value="${state.bgmVolume}" step="0.05" min="0" max="2" />
+      </div>
+    </div>
+    <div class="panel-section">
       <div class="filter-row">
         ${["推荐音乐", "会员热榜", "热门", "最新", "全部"]
           .map(
@@ -649,6 +671,7 @@ function renderResourcePanel() {
   const map = {
     visual: renderVisualTab,
     character: renderCharacterTab,
+    provider: renderProviderTab,
     voice: renderVoiceTab,
     music: renderMusicTab,
   };
@@ -665,8 +688,6 @@ function syncStudioInputs() {
   if ($("aspect_ratio")) $("aspect_ratio").value = state.aspectRatio;
   if ($("scene_type")) $("scene_type").value = state.sceneType;
   if ($("bgm_volume")) $("bgm_volume").value = String(state.bgmVolume);
-  if ($("backend")) $("backend").value = state.backend;
-  if ($("provider")) $("provider").value = state.provider;
   if ($("subtitles")) $("subtitles").checked = state.subtitles;
   if ($("template_id")) $("template_id").value = state.templateId;
   renderTemplateSummary();
@@ -782,7 +803,7 @@ function updateJobMeta(job) {
   if (job.template_name) lines.push(`模板：${job.template_name}`);
   if (job.effective_backend) lines.push(`实际链路：${job.effective_backend}`);
   if (job.effective_provider) lines.push(`实际提供商：${job.effective_provider}`);
-  if (job.image_count) lines.push(`图片数：${job.image_count}`);
+  if (job.image_count) lines.push(`参考图：${job.image_count}`);
   meta.textContent = lines.join(" ｜ ");
 }
 
@@ -829,28 +850,21 @@ async function submitJob() {
     return;
   }
 
-  const imageFiles = $("images")?.files;
-  if (!imageFiles || !imageFiles.length) {
-    alert("请至少上传一张参考图片再生成视频。");
-    return;
-  }
-
   const formData = new FormData();
   const prompt = state.assistantPrompt || state.storySummary || state.storyText || "Video storyboard draft";
   const storyboard = buildStoryboardPayload();
-  const bgmFile = $("bgm")?.files?.[0];
+  const bgmFile = state.bgmFile;
 
   formData.append("prompt", prompt);
-  formData.append("backend", state.backend);
+  formData.append("backend", "cloud");
   formData.append("provider", state.provider);
   formData.append("template_id", state.templateId || "");
   formData.append("subtitles", String(state.subtitles));
   formData.append("bgm_volume", String(state.bgmVolume));
   formData.append("storyboard_json", JSON.stringify(storyboard));
   if (bgmFile) formData.append("bgm", bgmFile);
-  for (const file of imageFiles) formData.append("images", file);
 
-  setLoading(true, "正在上传图片...");
+  setLoading(true, "正在创建生成任务...");
   setGlobalStatus("正在创建任务", "running");
   setDownloadState(false);
   updateJobMeta(null);
@@ -888,53 +902,14 @@ function attachStudioEvents() {
     state.storyText = $("story_text").value;
   });
 
-  $("aspect_ratio")?.addEventListener("change", (event) => {
-    state.aspectRatio = event.target.value;
-    renderAll();
-  });
-
   $("scene_type")?.addEventListener("change", (event) => {
     state.sceneType = event.target.value;
     renderAll();
   });
 
-  $("bgm_volume")?.addEventListener("input", (event) => {
-    state.bgmVolume = Number(event.target.value);
-  });
-
-  $("backend")?.addEventListener("change", (event) => {
-    state.backend = event.target.value;
-  });
-
-  $("provider")?.addEventListener("change", (event) => {
-    state.provider = event.target.value;
-  });
-
-  $("subtitles")?.addEventListener("change", (event) => {
-    state.subtitles = event.target.checked;
-  });
-
-  $("template_id")?.addEventListener("change", (event) => {
-    state.templateId = event.target.value;
-    renderTemplateSummary();
-  });
-
-  $("videos")?.addEventListener("change", async (event) => {
-    const files = Array.from(event.target.files || []);
-    if (!files.length) return;
-    try {
-      await uploadVideoAssets(files);
-      log("素材上传完成");
-    } catch (error) {
-      alert(`素材上传失败：${error.message}`);
-    } finally {
-      event.target.value = "";
-    }
-  });
-
   document.addEventListener("click", (event) => {
     if (event.target.closest("textarea, input, select")) return;
-    const target = event.target.closest("[data-tab], [data-style-id], [data-character-id], [data-character-scope], [data-voice-id], [data-music-id], [data-voice-filter], [data-music-filter], [data-action], .scene-card");
+    const target = event.target.closest("[data-tab], [data-style-id], [data-character-id], [data-character-scope], [data-provider-id], [data-voice-id], [data-music-id], [data-voice-filter], [data-music-filter], [data-action], .scene-card");
     if (!target) return;
 
     if (target.dataset.tab) {
@@ -957,6 +932,12 @@ function attachStudioEvents() {
 
     if (target.dataset.characterId) {
       toggleCharacterSelection(target.dataset.characterId);
+      renderAll();
+      return;
+    }
+
+    if (target.dataset.providerId) {
+      state.provider = target.dataset.providerId;
       renderAll();
       return;
     }
@@ -1025,16 +1006,26 @@ function attachStudioEvents() {
       state.searches.music = event.target.value;
       renderResourcePanel();
     }
+
+    if (event.target.id === "bgm_volume") {
+      state.bgmVolume = Number(event.target.value);
+    }
   });
 
   document.addEventListener("change", (event) => {
-    if (event.target.id === "panel_scene_type") {
-      state.sceneType = event.target.value;
-      renderAll();
-    }
-    if (event.target.id === "panel_aspect_ratio") {
+    if (event.target.id === "aspect_ratio") {
       state.aspectRatio = event.target.value;
       renderAll();
+    }
+    if (event.target.id === "template_id") {
+      state.templateId = event.target.value;
+      renderTemplateSummary();
+    }
+    if (event.target.id === "subtitles") {
+      state.subtitles = event.target.checked;
+    }
+    if (event.target.id === "bgm") {
+      state.bgmFile = event.target.files?.[0] || null;
     }
   });
 }
@@ -1050,7 +1041,6 @@ async function initStudio() {
     }
     renderAll();
     attachStudioEvents();
-    await refreshAssetList();
   } catch (error) {
     setGlobalStatus("初始化失败", "error");
     if ($("job_hint")) $("job_hint").textContent = `初始化失败：${error.message}`;
