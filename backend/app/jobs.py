@@ -40,7 +40,7 @@ class JobStore:
             data = self._load()
             if job_id in data:
                 raise ValueError("job exists")
-            now = int(time.time())
+            now = time.time()  # float for sub-second precision
             data[job_id] = {
                 "job_id": job_id,
                 "backend": backend,
@@ -81,6 +81,6 @@ class JobStore:
             if not job:
                 raise KeyError(job_id)
             job.update(fields)
-            job["updated_at"] = int(time.time())
+            job["updated_at"] = time.time()
             data[job_id] = job
             self._save(data)

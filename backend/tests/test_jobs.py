@@ -100,7 +100,8 @@ class TestJobStore:
 
     def test_list_recent_jobs(self):
         """Test listing recent jobs returns them sorted by creation time."""
-        # Create jobs
+        import time
+        # Create jobs with small delay to ensure distinct timestamps
         self.store.create(
             job_id="job-1",
             backend="local",
@@ -111,6 +112,7 @@ class TestJobStore:
             bgm=None,
             output="/output1.mp4",
         )
+        time.sleep(0.01)
         self.store.create(
             job_id="job-2",
             backend="cloud",
@@ -121,6 +123,7 @@ class TestJobStore:
             bgm=None,
             output="/output2.mp4",
         )
+        time.sleep(0.01)
         self.store.create(
             job_id="job-3",
             backend="local",
@@ -213,6 +216,6 @@ class TestJobStore:
         job = self.store.get("timestamp-job")
         assert "created_at" in job
         assert "updated_at" in job
-        assert isinstance(job["created_at"], int)
-        assert isinstance(job["updated_at"], int)
+        assert isinstance(job["created_at"], (int, float))
+        assert isinstance(job["updated_at"], (int, float))
         assert job["created_at"] == job["updated_at"]  # Should be equal initially

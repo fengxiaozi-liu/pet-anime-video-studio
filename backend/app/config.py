@@ -1,8 +1,8 @@
-import os
 from pathlib import Path
 from functools import lru_cache
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
+
 
 class Settings(BaseSettings):
     # API Keys
@@ -27,6 +27,7 @@ class Settings(BaseSettings):
         self.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
         self.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
         self.DATA_DIR.mkdir(parents=True, exist_ok=True)
+
 
 @lru_cache()
 def get_settings() -> Settings:

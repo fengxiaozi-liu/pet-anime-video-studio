@@ -39,7 +39,7 @@ class AssetStore:
 
     def add(self, *, kind: str, filename: str, suffix: str, bytes_data: bytes) -> dict[str, Any]:
         asset_id = uuid.uuid4().hex
-        now = int(time.time())
+        now = time.time()  # float for sub-second precision
         self.root_dir.mkdir(parents=True, exist_ok=True)
         out = self.root_dir / f"{asset_id}{suffix}"
         out.write_bytes(bytes_data)

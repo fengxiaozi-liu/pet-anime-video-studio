@@ -75,13 +75,10 @@ async def lifespan(app: FastAPI):
     security_enabled = os.getenv("SECURITY_ENABLED", "true").lower() == "true"
     if security_enabled:
         try:
-            api_username = os.getenv("API_KEY_USERNAME", "admin")
-            api_password = os.getenv("API_KEY_PASSWORD", "changeme123")
             security_manager = SecurityManager(
-                enabled=True,
-                max_requests_per_minute=10,
-                max_requests_per_hour=100,
-                credentials=None  # Will validate via HTTPBasic
+                api_keys={},
+                requests_per_minute=10,
+                requests_per_hour=100,
             )
             logger.info("Security manager initialized with rate limiting (10 req/min, 100 req/hour)")
         except Exception as e:

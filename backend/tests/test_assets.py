@@ -62,8 +62,9 @@ class TestAssetStore:
         assert result is None
 
     def test_list_recent_assets(self):
-        """Test listing recent assets returns them sorted by creation time."""
-        # Add multiple assets
+        """Test listing recent assets returns them sorted by creation time (newest first)."""
+        import time
+        # Add multiple assets with small delay to ensure distinct timestamps
         for i in range(3):
             self.store.add(
                 kind="image",
@@ -71,6 +72,7 @@ class TestAssetStore:
                 suffix=".png",
                 bytes_data=f"data{i}".encode(),
             )
+            time.sleep(0.01)  # Float timestamps provide sub-second precision
         
         # List with limit of 2
         recent = self.store.list_recent(limit=2)

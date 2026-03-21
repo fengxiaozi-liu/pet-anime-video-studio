@@ -42,7 +42,7 @@ cd pet-anime-video
 pip install -r backend/requirements.txt
 
 # Configure environment variables
-cp backend/.env.example backend/.env
+cp .env.example backend/.env
 # Edit .env with your API keys
 
 # Run backend server
@@ -61,10 +61,10 @@ git clone https://github.com/ferryman-lab/pet-anime-video.git
 cd pet-anime-video
 
 # 2. Configure environment variables
-cp backend/.env.example backend/.env
+cp .env.example backend/.env
 # Edit .env with your API keys:
 #   KLING_API_KEY=your_kling_api_key
-#   XINGHUN_API_KEY=your_xinghun_api_key
+#   DOUBAO_API_KEY=your_doubao_api_key
 
 # 3. Build and start containers
 docker-compose up -d --build
@@ -181,7 +181,7 @@ pet-anime-video/
 Create `backend/.env` from the example template:
 
 ```bash
-cp backend/.env.example backend/.env
+cp .env.example backend/.env
 ```
 
 Required variables:
@@ -192,15 +192,17 @@ HOST=0.0.0.0
 PORT=8000
 DEBUG=false
 
-# API Keys
-KUNGFU_AI_KEY=your_kungfu_key
-KUNG_SHAN_API_KEY=your_kungshan_key
+# API Keys (at least one required for cloud jobs)
+KLING_API_KEY=your_kling_key
+DOUBAO_API_KEY=your_doubao_key
 
-# Database (JSON File Storage)
-JOB_STORE_PATH=/data/jobs.json
+# Authentication
+SECURITY_ENABLED=true
+API_KEY_USERNAME=admin
+API_KEY_PASSWORD=changeme123
 ```
 
-Full configuration reference: [Config Documentation](./backend/README.md)
+Full configuration reference: [Config Documentation](./docs/CONFIGURATION.md)
 
 ## 🧪 Testing
 

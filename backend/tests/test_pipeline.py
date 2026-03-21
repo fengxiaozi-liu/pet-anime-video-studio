@@ -25,8 +25,8 @@ class TestPipeline:
         """Test running a job with local backend."""
         mock_render_local.return_value = None
         
-        # Create a job
-        job_id = self.store.create(
+        # Create a job (store.create returns None, so call get separately)
+        self.store.create(
             job_id="local-test-job",
             backend="local",
             provider=None,
@@ -35,26 +35,26 @@ class TestPipeline:
             images=["/path/to/cat.png"],
             bgm=None,
             output=str(self.output_dir / "cat.mp4"),
-        )["job_id"]
+        )
         
-        # Run the job (non-blocking, but we can check state)
-        run_job(job_id, self.store)
+        # Run the job (non-blocking, in background thread)
+        run_job("local-test-job", self.store)
         
         # Give it a moment to start
         import time
-        time.sleep(0.1)
+        time.sleep(0.2)
         
         # Check job was created and is in some state
-        job = self.store.get(job_id)
+        job = self.store.get("local-test-job")
         assert job is not None
-        assert job["job_id"] == job_id
+        assert job["job_id"] == "local-test-job"
 
     @patch("app.pipeline.render_cloud")
     def test_run_job_cloud_backend(self, mock_render_cloud):
         """Test running a job with cloud backend."""
         mock_render_cloud.return_value = None
         
-        job_id = self.store.create(
+        self.store.create(
             job_id="cloud-test-job",
             backend="cloud",
             provider="kling",
@@ -63,14 +63,14 @@ class TestPipeline:
             images=["/path/to/cloud.jpg"],
             bgm=None,
             output=str(self.output_dir / "cloud.mp4"),
-        )["job_id"]
+        )
         
-        run_job(job_id, self.store)
+        run_job("cloud-test-job", self.store)
         
         import time
-        time.sleep(0.1)
+        time.sleep(0.2)
         
-        job = self.store.get(job_id)
+        job = self.store.get("cloud-test-job")
         assert job is not None
         assert job["backend"] == "cloud"
         assert job["provider"] == "kling"
@@ -83,7 +83,7 @@ class TestPipeline:
         mock_render_cloud.side_effect = Exception("Cloud API unavailable")
         mock_render_local.return_value = None
         
-        job_id = self.store.create(
+        self.store.create(
             job_id="auto-fallback-job",
             backend="auto",
             provider="openai",
@@ -92,17 +92,15 @@ class TestPipeline:
             images=["/path/to/auto.jpg"],
             bgm=None,
             output=str(self.output_dir / "auto.mp4"),
-        )["job_id"]
+        )
         
-        run_job(job_id, self.store)
+        run_job("auto-fallback-job", self.store)
         
         import time
-        time.sleep(0.1)
+        time.sleep(0.2)
         
-        job = self.store.get(job_id)
+        job = self.store.get("auto-fallback-job")
         assert job is not None
-        # Should have tried cloud first (effective_backend might be set)
-        assert "effective_backend" in job or True  # Depends on timing
 
     @patch("app.pipeline.render_local")
     def test_run_job_creates_output_directory(self, mock_render_local):
@@ -111,7 +109,7 @@ class TestPipeline:
         
         mock_render_local.return_value = None
         
-        job_id = self.store.create(
+        self.store.create(
             job_id="mkdir-job",
             backend="local",
             provider=None,
@@ -120,13 +118,12 @@ class TestPipeline:
             images=["/path/to/img.png"],
             bgm=None,
             output=str(new_output_dir / "video.mp4"),
-        )["job_id"]
+        )
         
-        run_job(job_id, self.store)
+        run_job("mkdir-job", self.store)
         
-        # Directory should be created even if job still running
         import time
-        time.sleep(0.1)
+        time.sleep(0.2)
         
         # The pipeline creates parent dirs before rendering
         assert new_output_dir.exists() or True  # May complete fast
@@ -137,7 +134,7 @@ class TestPipeline:
         bgm_path = str(Path("/music/background.mp3"))
         mock_render_local.return_value = None
         
-        job_id = self.store.create(
+        self.store.create(
             job_id="bgm-job",
             backend="local",
             provider=None,
@@ -146,15 +143,15 @@ class TestPipeline:
             images=["/path/to/img.png"],
             bgm=bgm_path,
             output=str(self.output_dir / "with_bgm.mp4"),
-        )["job_id"]
+        )
         
-        run_job(job_id, self.store)
+        run_job("bgm-job", self.store)
         
         import time
-        time.sleep(0.1)
+        time.sleep(0.2)
         
         # Verify BGM path is stored in job
-        job = self.store.get(job_id)
+        job = self.store.get("bgm-job")
         assert job["bgm"] == bgm_path
 
     @patch("app.pipeline.render_cloud")
@@ -165,7 +162,7 @@ class TestPipeline:
         
         job_ids = []
         for provider in providers:
-            job_id = self.store.create(
+            self.store.create(
                 job_id=f"provider-{provider}-job",
                 backend="cloud",
                 provider=provider,
@@ -174,16 +171,15 @@ class TestPipeline:
                 images=["/path/to/img.png"],
                 bgm=None,
                 output=str(self.output_dir / f"{provider}.mp4"),
-            )["job_id"]
-            
-            run_job(job_id, self.store)
-            job_ids.append(job_id)
+            )
+            run_job(f"provider-{provider}-job", self.store)
+            job_ids.append(provider)
         
         import time
-        time.sleep(0.1)
+        time.sleep(0.2)
         
-        for i, job_id in enumerate(job_ids):
-            job = self.store.get(job_id)
+        for i, provider in enumerate(job_ids):
+            job = self.store.get(f"provider-{provider}-job")
             assert job is not None
             assert job["provider"] == providers[i]
 
@@ -198,7 +194,7 @@ class TestPipeline:
         """Test that errors during rendering are captured in job status."""
         mock_render_local.side_effect = Exception("Simulated render failure")
         
-        job_id = self.store.create(
+        self.store.create(
             job_id="error-job",
             backend="local",
             provider=None,
@@ -207,13 +203,13 @@ class TestPipeline:
             images=["/path/to/img.png"],
             bgm=None,
             output=str(self.output_dir / "error.mp4"),
-        )["job_id"]
+        )
         
-        run_job(job_id, self.store)
+        run_job("error-job", self.store)
         
         import time
-        time.sleep(0.1)
+        time.sleep(0.2)
         
-        job = self.store.get(job_id)
+        job = self.store.get("error-job")
         # Job should reflect error state eventually
         assert job is not None
