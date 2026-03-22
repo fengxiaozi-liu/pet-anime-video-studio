@@ -20,6 +20,7 @@ from __future__ import annotations
 
 from .base_t2i import TextToImageProvider, T2IResult, T2ITaskSubmission, T2IProviderField
 from .tongyi_t2i import TongyiWanxiangT2IProvider
+from .dalle_t2i import DallET2IProvider
 
 __all__ = [
     "TextToImageProvider",
@@ -27,4 +28,5 @@ __all__ = [
     "T2ITaskSubmission",
     "T2IProviderField",
     "TongyiWanxiangT2IProvider",
+    "DallET2IProvider",
 ]
