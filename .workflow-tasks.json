@@ -39,7 +39,7 @@
       "task_id": "t2i-003",
       "title": "创建通义万相(TongyiWanxiang) T2I Provider 子类",
       "assignee": "developer",
-      "status": "running",
+      "status": "completed",
       "phase": "implementation",
       "depends_on": ["t2i-001"],
       "inputs": {"base_provider_spec": "artifact-t2i-001"},
@@ -47,6 +47,7 @@
         "tongyi_provider_impl": "artifact-t2i-003"
       },
       "started_at": "2026-03-23T04:17:00+08:00",
+      "completed_at": "2026-03-23T03:19:00+08:00",
       "error_policy": {"on_fail": "retry_once", "max_retries": 1}
     },
     {
