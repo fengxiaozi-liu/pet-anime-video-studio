@@ -19,6 +19,7 @@ from .tongyi_t2i import TongyiWanxiangT2IProvider
 from __future__ import annotations
 
 from .base_t2i import TextToImageProvider, T2IResult, T2ITaskSubmission, T2IProviderField
+from .dispatcher import T2IDispatcher
 from .tongyi_t2i import TongyiWanxiangT2IProvider
 from .dalle_t2i import DallET2IProvider
 from .sd_t2i import StableDiffusionT2IProvider
@@ -28,6 +29,7 @@ __all__ = [
     "T2IResult",
     "T2ITaskSubmission",
     "T2IProviderField",
+    "T2IDispatcher",
     "TongyiWanxiangT2IProvider",
     "DallET2IProvider",
     "StableDiffusionT2IProvider",

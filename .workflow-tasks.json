@@ -84,7 +84,7 @@
       "task_id": "t2i-006",
       "title": "创建生图助手调度器 T2IDispatcher",
       "assignee": "developer",
-      "status": "pending",
+      "status": "completed",
       "phase": "implementation",
       "depends_on": ["t2i-002", "t2i-003", "t2i-004", "t2i-005"],
       "inputs": {
@@ -100,6 +100,8 @@
         "waits_for": ["t2i-002", "t2i-003", "t2i-004", "t2i-005"],
         "activation_condition": "all_of"
       },
+      "started_at": "2026-03-23T03:36:00+08:00",
+      "completed_at": "2026-03-23T03:36:00+08:00",
       "error_policy": {"on_fail": "retry_once", "max_retries": 1}
     },
     {
@@ -129,8 +131,8 @@
       "error_policy": {"on_fail": "retry_once", "max_retries": 1}
     }
   ],
-  "current_task_index": 4,
+  "current_task_index": 5,
   "total_count": 8,
-  "completed_count": 4,
-  "completion_rate": 50.0
+  "completed_count": 5,
+  "completion_rate": 62.5
 }
