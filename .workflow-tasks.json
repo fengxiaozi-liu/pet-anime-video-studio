@@ -192,6 +192,8 @@
       "started_at": "2026-03-23T03:40:00+08:00"
     }
   ],
+  "workflow_status": "completed",
+  "completed_at": "2026-03-23T03:40:00+08:00",
   "current_task_index": 5,
   "total_count": 8,
   "completed_count": 8,
