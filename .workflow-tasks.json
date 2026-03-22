@@ -108,13 +108,14 @@
       "task_id": "t2i-007",
       "title": "更新 character_image_assistants.py 使用新架构",
       "assignee": "developer",
-      "status": "pending",
+      "status": "completed",
       "phase": "implementation",
       "depends_on": ["t2i-006"],
       "inputs": {"dispatcher_impl": "artifact-t2i-006"},
       "outputs": {
         "updated_assistants": "artifact-t2i-007"
       },
+      "completed_at": "2026-03-23T03:38:00+08:00",
       "error_policy": {"on_fail": "retry_once", "max_retries": 1}
     },
     {

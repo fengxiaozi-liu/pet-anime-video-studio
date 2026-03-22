@@ -11,6 +11,15 @@ from urllib.parse import urlparse
 
 import httpx
 
+# T2I Provider 调度器（延迟导入，避免循环依赖）
+_t2i_dispatcher: "T2IDispatcher | None" = None
+
+def _get_t2i_dispatcher() -> "T2IDispatcher":
+    global _t2i_dispatcher
+    if _t2i_dispatcher is None:
+        from .providers.t2i.dispatcher import T2IDispatcher
+        _t2i_dispatcher = T2IDispatcher()
+    return _t2i_dispatcher
 
 DEFAULT_CHARACTER_IMAGE_SYSTEM_PROMPT = """
 你是一个角色形象设计助手。请根据角色名称、角色描述和故事背景，为角色出图服务补全更完整的中文提示词。
@@ -26,9 +35,78 @@ DEFAULT_CHARACTER_IMAGE_SYSTEM_PROMPT = """
 
 SUPPORTED_CHARACTER_IMAGE_PROTOCOLS = {"openai", "anthropic"}
 
+# T2I Provider 列表（由 T2IDispatcher.supported_codes() 动态获取）
+_T2I_SUPPORTED_CODES: list[str] = []
+
+
+def _get_provider_code(assistant_config: dict[str, Any]) -> str:
+    """
+    从 assistant_config 中提取 T2I Provider 代码。
+
+    优先级：
+    1. assistant_config.provider（显式指定）
+    2. 默认 "tongyi"
+    """
+    provider = assistant_config.get("provider")
+    if provider and str(provider).strip():
+        return str(provider).strip().lower()
+    return "tongyi"
+
+
+def _is_t2i_mode(assistant_config: dict[str, Any]) -> bool:
+    """判断是否使用 T2I Provider 模式（而非直接调用 LLM 出图）。"""
+    provider = assistant_config.get("provider")
+    # provider 为 null / None / 空字符串 → 走原有 LLM 路径
+    if provider is None or (isinstance(provider, str) and not provider.strip()):
+        return False
+    # provider 显式设置，且为已知 T2I provider code
+    global _T2I_SUPPORTED_CODES
+    if not _T2I_SUPPORTED_CODES:
+        try:
+            _T2I_SUPPORTED_CODES = _get_t2i_dispatcher().supported_codes()
+        except Exception:
+            _T2I_SUPPORTED_CODES = []
+    code = str(provider).strip().lower()
+    return code in _T2I_SUPPORTED_CODES
+
 
 def validate_character_image_assistant_config(config: dict[str, Any]) -> list[str]:
+    """
+    校验 assistant 配置。
+
+    支持两种模式：
+    - LLM 模式（默认）：校验 protocol / base_url / api_key / model
+    - T2I 模式（type="t2i"）：由 T2IDispatcher.validate_provider_config() 校验
+    """
     errors: list[str] = []
+    cfg_type = str(config.get("type") or "llm").strip().lower()
+
+    if cfg_type == "t2i":
+        # T2I Provider 模式
+        provider_code = _get_provider_code(config)
+        # 构建 Provider 所需的 config dict（只含 T2I 相关字段）
+        provider_config = {
+            k: v
+            for k, v in config.items()
+            if k
+            in (
+                "api_key",
+                "base_url",
+                "model",
+                "default_image_size",
+                "default_style",
+                "use_async",
+                "poll_interval_seconds",
+            )
+        }
+        try:
+            dispatcher = _get_t2i_dispatcher()
+            errors.extend(dispatcher.validate_provider_config(provider_code, provider_config))
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"T2I Provider 初始化失败: {exc}")
+        return errors
+
+    # LLM 模式（默认行为）
     protocol = str(config.get("protocol") or "openai").strip().lower()
     base_url = str(config.get("base_url") or "").strip()
     api_key = str(config.get("api_key") or "").strip()
@@ -419,8 +497,88 @@ def generate_character_preview(
         visual_style_name=visual_style_name,
         visual_style_prompt=visual_style_prompt,
     )
-    protocol = str(assistant_config.get("protocol") or "openai").strip().lower()
     filename_hint = Path(character_name or "character-preview").stem or "character-preview"
+
+    # ---------------------------------------------------------------
+    # T2I Provider 模式（通过 T2IDispatcher 调度）
+    # ---------------------------------------------------------------
+    if _is_t2i_mode(assistant_config):
+        provider_code = _get_provider_code(assistant_config)
+        # 从 assistant_config 提取 Provider 所需的配置字典
+        provider_config = {
+            k: v
+            for k, v in assistant_config.items()
+            if k
+            in (
+                "api_key",
+                "base_url",
+                "model",
+                "default_image_size",
+                "default_style",
+                "use_async",
+                "poll_interval_seconds",
+            )
+        }
+        # 提取风格参数（visual_style_name → style）
+        style: str | None = None
+        if visual_style_name:
+            style = visual_style_name
+        elif assistant_config.get("default_style"):
+            style = str(assistant_config["default_style"])
+
+        try:
+            dispatcher = _get_t2i_dispatcher()
+            t2i_result = dispatcher.generate(
+                provider_code=provider_code,
+                prompt=prompt,
+                config=provider_config,
+                negative_prompt=None,
+                style=style,
+                image_size=assistant_config.get("default_image_size"),
+            )
+        except Exception as exc:  # noqa: BLE001
+            raise ValueError(
+                f"T2I Provider [{provider_code}] 出图失败: {exc}"
+            ) from exc
+
+        if t2i_result.normalized_status == "failed":
+            raise ValueError(
+                f"T2I Provider [{provider_code}] 出图失败: "
+                f"{t2i_result.raw_response}"
+            )
+
+        # 将 T2IResult 转换为原有函数返回值格式
+        if t2i_result.image_url:
+            cached_url = _cache_preview_url(
+                storage_service,
+                preview_url=t2i_result.image_url,
+                filename_hint=filename_hint,
+            )
+            return {
+                "preview_image_url": cached_url,
+                "normalized_prompt": t2i_result.normalized_prompt or prompt,
+            }
+        if t2i_result.image_b64:
+            image_bytes = base64.b64decode(t2i_result.image_b64)
+            saved_url = _save_temp_preview(
+                storage_service,
+                image_bytes=image_bytes,
+                extension=".png",
+                filename_hint=filename_hint,
+            )
+            return {
+                "preview_image_url": saved_url,
+                "normalized_prompt": t2i_result.normalized_prompt or prompt,
+            }
+        raise ValueError(
+            f"T2I Provider [{provider_code}] 返回结果缺少图片数据: "
+            f"{t2i_result.raw_response}"
+        )
+
+    # ---------------------------------------------------------------
+    # LLM 模式（原有直接调用 OpenAI/Anthropic API 的逻辑）
+    # ---------------------------------------------------------------
+    protocol = str(assistant_config.get("protocol") or "openai").strip().lower()
     timeout = httpx.Timeout(120.0, connect=20.0)
 
     if protocol == "anthropic":
