@@ -18,7 +18,10 @@
         "base_provider_spec": "artifact-t2i-001"
       },
       "completed_at": "2026-03-23T02:17:00+08:00",
-      "error_policy": {"on_fail": "retry_once", "max_retries": 1}
+      "error_policy": {
+        "on_fail": "retry_once",
+        "max_retries": 1
+      }
     },
     {
       "task_id": "t2i-002",
@@ -26,14 +29,21 @@
       "assignee": "developer",
       "status": "completed",
       "phase": "implementation",
-      "depends_on": ["t2i-001"],
-      "inputs": {"base_provider_spec": "artifact-t2i-001"},
+      "depends_on": [
+        "t2i-001"
+      ],
+      "inputs": {
+        "base_provider_spec": "artifact-t2i-001"
+      },
       "outputs": {
         "jimeng_provider_impl": "artifact-t2i-002"
       },
       "started_at": "2026-03-23T03:15:00+08:00",
       "completed_at": "2026-03-23T03:17:00+08:00",
-      "error_policy": {"on_fail": "retry_once", "max_retries": 1}
+      "error_policy": {
+        "on_fail": "retry_once",
+        "max_retries": 1
+      }
     },
     {
       "task_id": "t2i-003",
@@ -41,14 +51,21 @@
       "assignee": "developer",
       "status": "completed",
       "phase": "implementation",
-      "depends_on": ["t2i-001"],
-      "inputs": {"base_provider_spec": "artifact-t2i-001"},
+      "depends_on": [
+        "t2i-001"
+      ],
+      "inputs": {
+        "base_provider_spec": "artifact-t2i-001"
+      },
       "outputs": {
         "tongyi_provider_impl": "artifact-t2i-003"
       },
       "started_at": "2026-03-23T04:17:00+08:00",
       "completed_at": "2026-03-23T03:19:00+08:00",
-      "error_policy": {"on_fail": "retry_once", "max_retries": 1}
+      "error_policy": {
+        "on_fail": "retry_once",
+        "max_retries": 1
+      }
     },
     {
       "task_id": "t2i-004",
@@ -56,14 +73,21 @@
       "assignee": "developer",
       "status": "completed",
       "phase": "implementation",
-      "depends_on": ["t2i-001"],
-      "inputs": {"base_provider_spec": "artifact-t2i-001"},
+      "depends_on": [
+        "t2i-001"
+      ],
+      "inputs": {
+        "base_provider_spec": "artifact-t2i-001"
+      },
       "outputs": {
         "dalle_provider_impl": "artifact-t2i-004"
       },
       "started_at": "2026-03-23T03:32:00+08:00",
       "completed_at": "2026-03-23T03:32:00+08:00",
-      "error_policy": {"on_fail": "retry_once", "max_retries": 1}
+      "error_policy": {
+        "on_fail": "retry_once",
+        "max_retries": 1
+      }
     },
     {
       "task_id": "t2i-005",
@@ -71,14 +95,21 @@
       "assignee": "developer",
       "status": "completed",
       "phase": "implementation",
-      "depends_on": ["t2i-001"],
-      "inputs": {"base_provider_spec": "artifact-t2i-001"},
+      "depends_on": [
+        "t2i-001"
+      ],
+      "inputs": {
+        "base_provider_spec": "artifact-t2i-001"
+      },
       "outputs": {
         "sd_provider_impl": "artifact-t2i-005"
       },
       "started_at": "2026-03-23T03:34:00+08:00",
       "completed_at": "2026-03-23T03:34:00+08:00",
-      "error_policy": {"on_fail": "retry_once", "max_retries": 1}
+      "error_policy": {
+        "on_fail": "retry_once",
+        "max_retries": 1
+      }
     },
     {
       "task_id": "t2i-006",
@@ -86,7 +117,12 @@
       "assignee": "developer",
       "status": "completed",
       "phase": "implementation",
-      "depends_on": ["t2i-002", "t2i-003", "t2i-004", "t2i-005"],
+      "depends_on": [
+        "t2i-002",
+        "t2i-003",
+        "t2i-004",
+        "t2i-005"
+      ],
       "inputs": {
         "jimeng_impl": "artifact-t2i-002",
         "tongyi_impl": "artifact-t2i-003",
@@ -97,12 +133,20 @@
         "dispatcher_impl": "artifact-t2i-006"
       },
       "join_gate": {
-        "waits_for": ["t2i-002", "t2i-003", "t2i-004", "t2i-005"],
+        "waits_for": [
+          "t2i-002",
+          "t2i-003",
+          "t2i-004",
+          "t2i-005"
+        ],
         "activation_condition": "all_of"
       },
       "started_at": "2026-03-23T03:36:00+08:00",
       "completed_at": "2026-03-23T03:36:00+08:00",
-      "error_policy": {"on_fail": "retry_once", "max_retries": 1}
+      "error_policy": {
+        "on_fail": "retry_once",
+        "max_retries": 1
+      }
     },
     {
       "task_id": "t2i-007",
@@ -110,30 +154,46 @@
       "assignee": "developer",
       "status": "completed",
       "phase": "implementation",
-      "depends_on": ["t2i-006"],
-      "inputs": {"dispatcher_impl": "artifact-t2i-006"},
+      "depends_on": [
+        "t2i-006"
+      ],
+      "inputs": {
+        "dispatcher_impl": "artifact-t2i-006"
+      },
       "outputs": {
         "updated_assistants": "artifact-t2i-007"
       },
       "completed_at": "2026-03-23T03:38:00+08:00",
-      "error_policy": {"on_fail": "retry_once", "max_retries": 1}
+      "error_policy": {
+        "on_fail": "retry_once",
+        "max_retries": 1
+      }
     },
     {
       "task_id": "t2i-008",
       "title": "编写测试用例验证所有 T2I Provider",
       "assignee": "developer",
-      "status": "pending",
+      "status": "completed",
       "phase": "testing",
-      "depends_on": ["t2i-007"],
-      "inputs": {"updated_assistants": "artifact-t2i-007"},
+      "depends_on": [
+        "t2i-007"
+      ],
+      "inputs": {
+        "updated_assistants": "artifact-t2i-007"
+      },
       "outputs": {
         "test_spec": "artifact-t2i-008"
       },
-      "error_policy": {"on_fail": "retry_once", "max_retries": 1}
+      "error_policy": {
+        "on_fail": "retry_once",
+        "max_retries": 1
+      },
+      "completed_at": "2026-03-23T03:40:00+08:00",
+      "started_at": "2026-03-23T03:40:00+08:00"
     }
   ],
   "current_task_index": 5,
   "total_count": 8,
-  "completed_count": 5,
-  "completion_rate": 62.5
+  "completed_count": 8,
+  "completion_rate": 100.0
 }

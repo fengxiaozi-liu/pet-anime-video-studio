@@ -248,6 +248,10 @@ class TextToImageProvider(ABC):
         -------
         T2IResult
         """
+        # Validate config before attempting generation
+        errors = self.validate_config(config)
+        if errors:
+            raise ValueError(f"Invalid config for provider {self.code()}: {'; '.join(errors)}")
         result = self._do_generate(
             prompt=prompt,
             negative_prompt=negative_prompt,
