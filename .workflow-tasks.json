@@ -1,0 +1,128 @@
+{
+  "workflow_name": "pet-anime-t2i-refactor",
+  "goal": "将生图助手重构为父子类模型，兼容不同类型的文生图 API",
+  "started_at": "2026-03-23T01:14:00+08:00",
+  "report_time": "2026-03-24T10:00:00+08:00",
+  "schedule_interval": "1h",
+  "branch": "main",
+  "tasks": [
+    {
+      "task_id": "t2i-001",
+      "title": "创建 TextToImageProvider 基类（父子类架构）",
+      "assignee": "architect",
+      "status": "completed",
+      "phase": "design",
+      "depends_on": [],
+      "inputs": {},
+      "outputs": {
+        "base_provider_spec": "artifact-t2i-001"
+      },
+      "completed_at": "2026-03-23T02:17:00+08:00",
+      "error_policy": {"on_fail": "retry_once", "max_retries": 1}
+    },
+    {
+      "task_id": "t2i-002",
+      "title": "创建即梦(Jimeng) T2I Provider 子类",
+      "assignee": "developer",
+      "status": "pending",
+      "phase": "implementation",
+      "depends_on": ["t2i-001"],
+      "inputs": {"base_provider_spec": "artifact-t2i-001"},
+      "outputs": {
+        "jimeng_provider_impl": "artifact-t2i-002"
+      },
+      "error_policy": {"on_fail": "retry_once", "max_retries": 1}
+    },
+    {
+      "task_id": "t2i-003",
+      "title": "创建通义万相(TongyiWanxiang) T2I Provider 子类",
+      "assignee": "developer",
+      "status": "pending",
+      "phase": "implementation",
+      "depends_on": ["t2i-001"],
+      "inputs": {"base_provider_spec": "artifact-t2i-001"},
+      "outputs": {
+        "tongyi_provider_impl": "artifact-t2i-003"
+      },
+      "error_policy": {"on_fail": "retry_once", "max_retries": 1}
+    },
+    {
+      "task_id": "t2i-004",
+      "title": "创建 OpenAI DALL-E T2I Provider 子类",
+      "assignee": "developer",
+      "status": "pending",
+      "phase": "implementation",
+      "depends_on": ["t2i-001"],
+      "inputs": {"base_provider_spec": "artifact-t2i-001"},
+      "outputs": {
+        "dalle_provider_impl": "artifact-t2i-004"
+      },
+      "error_policy": {"on_fail": "retry_once", "max_retries": 1}
+    },
+    {
+      "task_id": "t2i-005",
+      "title": "创建 Stable Diffusion T2I Provider 子类",
+      "assignee": "developer",
+      "status": "pending",
+      "phase": "implementation",
+      "depends_on": ["t2i-001"],
+      "inputs": {"base_provider_spec": "artifact-t2i-001"},
+      "outputs": {
+        "sd_provider_impl": "artifact-t2i-005"
+      },
+      "error_policy": {"on_fail": "retry_once", "max_retries": 1}
+    },
+    {
+      "task_id": "t2i-006",
+      "title": "创建生图助手调度器 T2IDispatcher",
+      "assignee": "developer",
+      "status": "pending",
+      "phase": "implementation",
+      "depends_on": ["t2i-002", "t2i-003", "t2i-004", "t2i-005"],
+      "inputs": {
+        "jimeng_impl": "artifact-t2i-002",
+        "tongyi_impl": "artifact-t2i-003",
+        "dalle_impl": "artifact-t2i-004",
+        "sd_impl": "artifact-t2i-005"
+      },
+      "outputs": {
+        "dispatcher_impl": "artifact-t2i-006"
+      },
+      "join_gate": {
+        "waits_for": ["t2i-002", "t2i-003", "t2i-004", "t2i-005"],
+        "activation_condition": "all_of"
+      },
+      "error_policy": {"on_fail": "retry_once", "max_retries": 1}
+    },
+    {
+      "task_id": "t2i-007",
+      "title": "更新 character_image_assistants.py 使用新架构",
+      "assignee": "developer",
+      "status": "pending",
+      "phase": "implementation",
+      "depends_on": ["t2i-006"],
+      "inputs": {"dispatcher_impl": "artifact-t2i-006"},
+      "outputs": {
+        "updated_assistants": "artifact-t2i-007"
+      },
+      "error_policy": {"on_fail": "retry_once", "max_retries": 1}
+    },
+    {
+      "task_id": "t2i-008",
+      "title": "编写测试用例验证所有 T2I Provider",
+      "assignee": "developer",
+      "status": "pending",
+      "phase": "testing",
+      "depends_on": ["t2i-007"],
+      "inputs": {"updated_assistants": "artifact-t2i-007"},
+      "outputs": {
+        "test_spec": "artifact-t2i-008"
+      },
+      "error_policy": {"on_fail": "retry_once", "max_retries": 1}
+    }
+  ],
+  "current_task_index": 1,
+  "total_count": 8,
+  "completed_count": 1,
+  "completion_rate": 12.5
+}

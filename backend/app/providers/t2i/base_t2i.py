@@ -17,13 +17,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from pathlib import Path
-from typing import TYPE_CHECKING, Any
-
-from ..providers.base import ProviderField
-
-if TYPE_CHECKING:
-    pass
+from typing import Any
 
 
 # ---------------------------------------------------------------------------
@@ -33,7 +27,7 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class T2IProviderField:
-    """T2I Provider 配置字段（与 ProviderField 兼容但独立定义）"""
+    """T2I Provider 配置字段"""
 
     key: str
     label: str
@@ -63,12 +57,14 @@ class T2IResult:
     image_url: 生成图片的访问 URL（可直接下载的公网 URL）
     image_b64:  base64 编码的图片数据（image_url 缺失时使用）
     normalized_prompt: 经过模型规范化后的提示词（便于追源）
+    normalized_status: 统一状态 (pending / done / failed)
     raw_response: 上游接口原始响应（便于调试）
     """
 
     image_url: str | None = None
     image_b64: str | None = None
     normalized_prompt: str | None = None
+    normalized_status: str = "pending"
     raw_response: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -76,6 +72,7 @@ class T2IResult:
             "image_url": self.image_url,
             "image_b64": self.image_b64,
             "normalized_prompt": self.normalized_prompt,
+            "normalized_status": self.normalized_status,
             "raw_response": self.raw_response,
         }
 
@@ -110,13 +107,23 @@ class TextToImageProvider(ABC):
 
     设计原则
     --------
-    1. 同步模式 Provider（如 DALL-E、Stable Diffusion）只需实现 generate()；
-       submit / poll 使用默认实现（直接调用 generate 并包装为异步结果）。
+    1. 同步模式 Provider（如 DALL-E、Stable Diffusion）只需实现 _do_generate()；
+       submit / poll 使用默认实现（submit 调用 generate 并包装为已完成的任务记录）。
     2. 异步模式 Provider（如即梦、通义万相）实现 submit() + poll()。
     3. 所有 Provider 必须实现 code / display_name / description /
-       list_config_fields / validate_config / get_capabilities。
-    4. normalize_result() 统一处理 image_url / image_b64 归一化，子类
-       可覆盖以适配特殊响应结构。
+       list_config_fields / validate_config / _do_generate。
+    4. normalize_result() 统一处理 image_url / image_b64 归一化并设置
+       normalized_status，子类可覆盖以适配特殊响应结构。
+
+    方法调用链
+    ---------
+    同步模式:
+        generate() → _do_generate() → normalize_result()
+        submit()   → generate() [= _do_generate() + normalize_result()]
+
+    异步模式:
+        submit() → 上游提交任务 → 返回 T2ITaskSubmission
+        poll()   → 上游轮询 → normalize_result()
     """
 
     # ------------------------------------------------------------------
@@ -164,12 +171,12 @@ class TextToImageProvider(ABC):
         默认返回：
 
         {
-            "supports_async": True,      # 是否支持异步提交+轮询
-            "supports_sync": True,        # 是否支持同步生成（直接返回图片）
-            "supports_styles": True,      # 是否支持 style/style_strength 参数
+            "supports_async": True,         # 是否支持异步提交+轮询
+            "supports_sync": True,          # 是否支持同步生成（直接返回图片）
+            "supports_styles": True,         # 是否支持 style/style_strength 参数
             "supports_negative_prompt": True,  # 是否支持反向提示词
-            "supports_image_size": True,  # 是否支持指定图像尺寸
-            "max_image_size": "1024x1024",   # 最大图像尺寸
+            "supports_image_size": True,    # 是否支持指定图像尺寸
+            "max_image_size": "1024x1024", # 最大图像尺寸
         }
         """
         return {
@@ -214,7 +221,8 @@ class TextToImageProvider(ABC):
         """
         同步生成图片。
 
-        默认实现：调用 _do_generate() 执行实际的 API 请求。
+        默认实现：调用 _do_generate() 执行实际的 API 请求，
+        然后通过 normalize_result() 归一化结果。
         子类如需自定义请求逻辑可覆盖 _do_generate() 或直接覆盖 generate()。
 
         Parameters
@@ -271,9 +279,13 @@ class TextToImageProvider(ABC):
         """
         异步提交图片生成任务。
 
-        默认实现：直接调用 generate()（同步模式 Provider 使用），
+        默认实现（同步模式）：
+        直接调用 generate()（即 _do_generate() + normalize_result()），
         将结果包装为已完成的任务提交记录。
-        异步模式 Provider（如即梦）应覆盖此方法以真正提交任务并返回 task_id。
+        适用于 DALL-E、Stable Diffusion 等同步返回结果的 Provider。
+
+        异步模式 Provider（如即梦、通义万相）应覆盖此方法，
+        真正向上游提交任务并返回带 task_id 的 T2ITaskSubmission。
         """
         result = self.generate(
             prompt=prompt,
@@ -302,12 +314,19 @@ class TextToImageProvider(ABC):
         """
         轮询异步任务状态。
 
-        默认实现：返回失败（同步模式 Provider 不需要轮询）。
-        异步模式 Provider（如即梦）应覆盖此方法以实现真正的轮询逻辑。
+        默认实现（同步模式 Provider）：
+        返回失败结果。同步模式 Provider 不需要轮询，
+        其 submit() 已通过 generate() 同步获取结果。
+
+        异步模式 Provider（如即梦、通义万相）应覆盖此方法，
+        真正向上游轮询任务状态并返回 T2IResult。
         """
         return T2IResult(
             normalized_status="failed",
-            raw_response={"error": f"Provider {self.code()} does not support async polling (sync-only)"},
+            raw_response={
+                "error": f"Provider {self.code()} does not support async polling "
+                "(sync-only mode: use generate() directly)"
+            },
         )
 
     # ------------------------------------------------------------------
@@ -327,8 +346,11 @@ class TextToImageProvider(ABC):
         extra_params: dict[str, Any] | None,
     ) -> T2IResult:
         """
-        执行实际 API 请求的虚方法。默认抛出 NotImplementedError。
-        子类实现真正的请求逻辑后设置 result_image_url / result_b64。
+        执行实际 API 请求的虚方法。
+
+        默认实现：抛出 NotImplementedError。
+        子类必须覆盖此方法，实现真正的 API 调用逻辑，
+        返回包含 image_url / image_b64 / raw_response 的 T2IResult。
         """
         raise NotImplementedError(
             f"{self.__class__.__name__} must override _do_generate() or generate()"
@@ -336,19 +358,37 @@ class TextToImageProvider(ABC):
 
     def normalize_result(self, result: T2IResult) -> T2IResult:
         """
-        统一归一化结果。默认确保 image_url / image_b64 至少有一个非空。
+        统一归一化结果。
+
+        1. 若 result.image_url 或 result.image_b64 已非空，直接设置
+           normalized_status="done" 并返回。
+        2. 否则尝试从 raw_response 中提取图片（调用 _extract.py），
+           提取成功则 normalized_status="done"，失败则 normalized_status="failed"。
+
         子类可覆盖以处理特殊响应结构。
         """
         if result.image_url or result.image_b64:
-            return result
+            return T2IResult(
+                image_url=result.image_url,
+                image_b64=result.image_b64,
+                normalized_prompt=result.normalized_prompt,
+                normalized_status="done",
+                raw_response=result.raw_response,
+            )
+
         # 尝试从 raw_response 中提取
         raw = result.raw_response or {}
         from ._extract import extract_image_from_response
 
         extracted = extract_image_from_response(raw)
+        extracted_url = extracted.get("image_url", "")
+        extracted_b64 = extracted.get("image_b64", "")
+        status = "done" if (extracted_url or extracted_b64) else "failed"
+
         return T2IResult(
-            image_url=result.image_url or extracted.get("image_url"),
-            image_b64=result.image_b64 or extracted.get("image_b64"),
+            image_url=extracted_url or None,
+            image_b64=extracted_b64 or None,
             normalized_prompt=result.normalized_prompt,
+            normalized_status=status,
             raw_response=result.raw_response,
         )
