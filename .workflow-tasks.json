@@ -58,6 +58,7 @@
     "2026-03-30T12:47:00+08:00 - Updated tasks: 8 tasks total, 8 completed",
     "2026-03-30T15:00:00+08:00 - Cron check: all tasks still completed, no pending tasks.",
     "2026-03-30T16:08:00+08:00 - Cron check: all tasks completed, no pending tasks.",
-    "2026-03-30T17:09:00+08:00 - Cron check: all 8 tasks (wf-001 to wf-008) completed, no pending tasks to execute."
+    "2026-03-30T17:09:00+08:00 - Cron check: all 8 tasks (wf-001 to wf-008) completed, no pending tasks to execute.",
+    "2026-03-30T18:16:00+08:00 - Cron check: all 8 tasks still completed, workflow pet-anime-t2i-refactor is 100% done. No pending tasks."
   ]
 }
