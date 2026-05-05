@@ -21,7 +21,7 @@ DEFAULT_STORY_ASSISTANT_SYSTEM_PROMPT = """
       "title": "分镜标题",
       "prompt": "画面描述",
       "subtitle": "字幕文案",
-      "duration_s": 4
+      "duration_s": 5
     }
   ]
 }
@@ -34,6 +34,38 @@ DEFAULT_STORY_ASSISTANT_SYSTEM_PROMPT = """
 """.strip()
 
 SUPPORTED_STORY_ASSISTANT_PROTOCOLS = {"openai", "anthropic"}
+STORY_DRAFT_SCHEMA_NAME = "story_draft"
+STORY_DRAFT_TOOL_NAME = "create_story_draft"
+STORY_DRAFT_JSON_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["story_summary", "story_text", "scenes"],
+    "properties": {
+        "story_summary": {
+            "type": "string",
+            "description": "一句到三句的内容概览。",
+        },
+        "story_text": {
+            "type": "string",
+            "description": "完整策划正文，必须包含【内容概览】【角色列表】【分镜脚本】三个段落标题。",
+        },
+        "scenes": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["title", "prompt", "subtitle", "duration_s"],
+                "properties": {
+                    "title": {"type": "string"},
+                    "prompt": {"type": "string"},
+                    "subtitle": {"type": "string"},
+                    "duration_s": {"type": "number"},
+                },
+            },
+        },
+    },
+}
 
 
 def validate_story_assistant_config(config: dict[str, Any]) -> list[str]:
@@ -99,6 +131,8 @@ def _extract_text_content(content: Any) -> str:
 
 def _extract_json_payload(raw_text: str) -> dict[str, Any]:
     text = raw_text.strip()
+    if not text:
+        raise ValueError("模型未返回合法 JSON 对象")
     if text.startswith("```"):
         lines = text.splitlines()
         if lines and lines[0].startswith("```"):
@@ -106,6 +140,16 @@ def _extract_json_payload(raw_text: str) -> dict[str, Any]:
         if lines and lines[-1].startswith("```"):
             lines = lines[:-1]
         text = "\n".join(lines).strip()
+
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        payload = None
+    if isinstance(payload, dict):
+        return payload
+    if isinstance(payload, str):
+        return _extract_json_payload(payload)
+
     start = text.find("{")
     end = text.rfind("}")
     if start == -1 or end == -1 or end <= start:
@@ -117,6 +161,41 @@ def _extract_json_payload(raw_text: str) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValueError("模型返回结果不是 JSON object")
     return payload
+
+
+def _openai_story_response_format() -> dict[str, Any]:
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": STORY_DRAFT_SCHEMA_NAME,
+            "strict": True,
+            "schema": STORY_DRAFT_JSON_SCHEMA,
+        },
+    }
+
+
+def _anthropic_story_tool() -> dict[str, Any]:
+    return {
+        "name": STORY_DRAFT_TOOL_NAME,
+        "description": "生成视频故事策划、正文与分镜草稿。",
+        "input_schema": STORY_DRAFT_JSON_SCHEMA,
+    }
+
+
+def _extract_anthropic_tool_payload(content: Any) -> dict[str, Any] | None:
+    if not isinstance(content, list):
+        return None
+    for item in content:
+        if not isinstance(item, dict):
+            continue
+        if item.get("type") != "tool_use" or item.get("name") != STORY_DRAFT_TOOL_NAME:
+            continue
+        tool_input = item.get("input")
+        if isinstance(tool_input, dict):
+            return tool_input
+        if isinstance(tool_input, str):
+            return _extract_json_payload(tool_input)
+    return None
 
 
 def _scene_block(scene: dict[str, Any], index: int) -> str:
@@ -141,24 +220,43 @@ def _compose_story_text(summary: str, scenes: list[dict[str, Any]], characters: 
     return f"【内容概览】\n{summary}\n\n【角色列表】\n" + "\n".join(role_lines) + f"\n\n【分镜脚本】\n{scene_lines}"
 
 
+def _first_text(payload: dict[str, Any], keys: tuple[str, ...]) -> str:
+    for key in keys:
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
+def _first_list(payload: dict[str, Any], keys: tuple[str, ...]) -> list[Any] | None:
+    for key in keys:
+        value = payload.get(key)
+        if isinstance(value, list):
+            return value
+    return None
+
+
 def _normalize_story_response(payload: dict[str, Any], characters: list[dict[str, Any]]) -> dict[str, Any]:
-    summary = str(payload.get("story_summary") or "").strip()
+    summary = _first_text(payload, ("story_summary", "story_overview", "summary", "overview"))
     if not summary:
         raise ValueError("模型返回缺少 story_summary")
-    raw_scenes = payload.get("scenes")
+    raw_scenes = _first_list(payload, ("scenes", "storyboard", "storyboards"))
     if not isinstance(raw_scenes, list) or not raw_scenes:
         raise ValueError("模型返回缺少 scenes")
     scenes: list[dict[str, Any]] = []
     for index, scene in enumerate(raw_scenes):
         if not isinstance(scene, dict):
             raise ValueError(f"scenes[{index}] 不是对象")
-        title = str(scene.get("title") or f"分镜 {index + 1}").strip()
-        prompt = str(scene.get("prompt") or "").strip()
-        subtitle = str(scene.get("subtitle") or "").strip()
+        title = _first_text(scene, ("title", "scene_title", "shot_title")) or f"分镜 {index + 1}"
+        prompt = _first_text(
+            scene,
+            ("prompt", "scene_prompt", "visual_prompt", "image_prompt", "description", "shot_description"),
+        )
+        subtitle = _first_text(scene, ("subtitle", "caption", "narration", "voiceover", "text"))
         if not prompt:
             raise ValueError(f"scenes[{index}] 缺少 prompt")
         try:
-            duration_s = float(scene.get("duration_s") or 4)
+            duration_s = float(scene.get("duration_s") or scene.get("duration") or scene.get("seconds") or 4)
         except (TypeError, ValueError) as exc:
             raise ValueError(f"scenes[{index}] 的 duration_s 非法") from exc
         scenes.append(
@@ -169,7 +267,7 @@ def _normalize_story_response(payload: dict[str, Any], characters: list[dict[str
                 "duration_s": duration_s if duration_s > 0 else 4.0,
             }
         )
-    story_text = str(payload.get("story_text") or "").strip() or _compose_story_text(summary, scenes, characters)
+    story_text = _first_text(payload, ("story_text", "story_planning", "planning")) or _compose_story_text(summary, scenes, characters)
     return {
         "story_summary": summary,
         "story_text": story_text,
@@ -199,6 +297,7 @@ def _build_user_prompt(
         "已选角色：",
         "\n".join(character_lines),
         "请生成适合短视频工作台使用的故事概览、策划正文和分镜草稿。",
+        "只返回一个 JSON 对象，首字符必须是 {，末字符必须是 }，不要包含 Markdown、代码块或解释文字。",
     ]
     return "\n".join(parts)
 
@@ -286,7 +385,7 @@ def _generate_via_openai(
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ],
-        "temperature": float(assistant_config.get("temperature") or 0.7),
+        "response_format": _openai_story_response_format(),
     }
     headers = {
         "Authorization": f"Bearer {assistant_config['api_key']}",
@@ -316,8 +415,9 @@ def _generate_via_anthropic(
         "model": assistant_config["model"],
         "system": system_prompt,
         "messages": [{"role": "user", "content": user_prompt}],
-        "temperature": float(assistant_config.get("temperature") or 0.7),
         "max_tokens": 4000,
+        "tools": [_anthropic_story_tool()],
+        "tool_choice": {"type": "tool", "name": STORY_DRAFT_TOOL_NAME},
     }
     headers = {
         "x-api-key": str(assistant_config["api_key"]),
@@ -327,6 +427,9 @@ def _generate_via_anthropic(
     url = _anthropic_messages_url(str(assistant_config["base_url"]))
     timeout = httpx.Timeout(90.0, connect=30.0)
     data = _post_json_with_retry(url=url, headers=headers, payload=payload, timeout=timeout)
+    tool_payload = _extract_anthropic_tool_payload(data.get("content"))
+    if tool_payload is not None:
+        return _normalize_story_response(tool_payload, characters)
     content = _extract_text_content(data.get("content"))
     if not content:
         raise ValueError("模型未返回文本内容")

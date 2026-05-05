@@ -399,6 +399,31 @@ def validate_story_assistant_config(
     return {"ok": not errors, "errors": errors, "assistant_code": assistant_code}
 
 
+@app.post("/api/story-assistant-configs/{assistant_code}/test")
+def test_story_assistant_config(
+    assistant_code: str,
+    body: StoryAssistantConfigPayload,
+    _user: str = Depends(authenticated_endpoint),
+) -> dict[str, Any]:
+    try:
+        return {**story_assistant_service.test_connection(body.model_dump()), "assistant_code": assistant_code}
+    except ValueError as exc:
+        return {"ok": False, "errors": [str(exc)], "assistant_code": assistant_code}
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"故事助手连接测试失败: {exc}") from exc
+
+
+@app.delete("/api/story-assistant-configs/{assistant_code}")
+def delete_story_assistant_config(
+    assistant_code: str,
+    _user: str = Depends(authenticated_endpoint),
+) -> dict[str, Any]:
+    deleted = story_assistant_service.delete(assistant_code.strip())
+    if deleted is None:
+        raise HTTPException(status_code=404, detail="story assistant not found")
+    return {"ok": True, "story_assistant_config": deleted}
+
+
 @app.put("/api/character-image-assistant-configs/{assistant_code}")
 def update_character_image_assistant_config(
     assistant_code: str,
@@ -419,6 +444,31 @@ def validate_character_image_assistant_config(
 ) -> dict[str, Any]:
     errors = character_image_assistant_service.validate(body.model_dump())
     return {"ok": not errors, "errors": errors, "assistant_code": assistant_code}
+
+
+@app.post("/api/character-image-assistant-configs/{assistant_code}/test")
+def test_character_image_assistant_config(
+    assistant_code: str,
+    body: CharacterImageAssistantConfigPayload,
+    _user: str = Depends(authenticated_endpoint),
+) -> dict[str, Any]:
+    try:
+        return {**character_image_assistant_service.test_connection(body.model_dump()), "assistant_code": assistant_code}
+    except ValueError as exc:
+        return {"ok": False, "errors": [str(exc)], "assistant_code": assistant_code}
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"生图助手连接测试失败: {exc}") from exc
+
+
+@app.delete("/api/character-image-assistant-configs/{assistant_code}")
+def delete_character_image_assistant_config(
+    assistant_code: str,
+    _user: str = Depends(authenticated_endpoint),
+) -> dict[str, Any]:
+    deleted = character_image_assistant_service.delete(assistant_code.strip())
+    if deleted is None:
+        raise HTTPException(status_code=404, detail="character image assistant not found")
+    return {"ok": True, "character_image_assistant_config": deleted}
 
 
 @app.post("/api/story-assistants/generate")

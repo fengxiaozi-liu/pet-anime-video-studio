@@ -57,6 +57,7 @@ let pollingTimer = null;
 let activeMaterialConfigTab = "visuals";
 let activeConfigTab = "assistants";
 let activeConfigSection = "jimeng";
+let storyHistoryVisible = false;
 const pendingMaterialDrafts = { visuals: [], frames: [], characters: [], voices: [], music: [] };
 const pendingStoryAssistantDrafts = [];
 const pendingCharacterImageAssistantDrafts = [];
@@ -64,6 +65,8 @@ const pendingCustomProviderDrafts = [];
 const materialUploadFiles = new Map();
 const materialPreviewUrls = new Map();
 const materialUploadNames = new Map();
+const STORY_DRAFT_HISTORY_KEY = "video_studio_story_draft_history";
+let storyDraftHistory = [];
 
 function page() {
   return document.body.dataset.page || "";
@@ -526,6 +529,18 @@ async function validateStoryAssistantConfig(assistantCode, payload) {
   });
 }
 
+async function testStoryAssistantConfig(assistantCode, payload) {
+  return fetchJson(`/api/story-assistant-configs/${assistantCode}/test`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...payload, temperature: undefined }),
+  });
+}
+
+async function deleteStoryAssistantConfig(assistantCode) {
+  return fetchJson(`/api/story-assistant-configs/${assistantCode}`, { method: "DELETE" });
+}
+
 async function updateCharacterImageAssistantConfig(assistantCode, payload) {
   return fetchJson(`/api/character-image-assistant-configs/${assistantCode}`, {
     method: "PUT",
@@ -540,6 +555,18 @@ async function validateCharacterImageAssistantConfig(assistantCode, payload) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
+}
+
+async function testCharacterImageAssistantConfig(assistantCode, payload) {
+  return fetchJson(`/api/character-image-assistant-configs/${assistantCode}/test`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+async function deleteCharacterImageAssistantConfig(assistantCode) {
+  return fetchJson(`/api/character-image-assistant-configs/${assistantCode}`, { method: "DELETE" });
 }
 
 async function generateStoryDraft(payload) {
@@ -718,6 +745,111 @@ function documentSummary(text) {
   return clean.split("\n").find((line) => line.trim()) || "";
 }
 
+function loadStoryDraftHistory() {
+  try {
+    const raw = window.localStorage?.getItem(STORY_DRAFT_HISTORY_KEY);
+    const items = raw ? JSON.parse(raw) : [];
+    storyDraftHistory = Array.isArray(items) ? items.slice(0, 8) : [];
+  } catch {
+    storyDraftHistory = [];
+  }
+}
+
+function saveStoryDraftHistory() {
+  try {
+    window.localStorage?.setItem(STORY_DRAFT_HISTORY_KEY, JSON.stringify(storyDraftHistory.slice(0, 8)));
+  } catch {
+    // Local storage may be unavailable in private contexts.
+  }
+}
+
+function rememberStoryDraft(prompt, draft) {
+  const item = {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    created_at: Date.now(),
+    prompt,
+    story_summary: draft.story_summary || "",
+    story_text: draft.story_text || "",
+    scenes: draft.scenes || [],
+  };
+  storyDraftHistory = [item, ...storyDraftHistory.filter((draftItem) => draftItem.story_text !== item.story_text)].slice(0, 8);
+  saveStoryDraftHistory();
+}
+
+function saveCurrentStoryDraft() {
+  const storyText = $("story_document")?.value || state.storyText || "";
+  const clean = storyText.trim();
+  if (!clean) {
+    window.alert("当前正文为空，暂时没有可保存的草稿。");
+    return;
+  }
+  rememberStoryDraft(state.assistantPrompt || documentSummary(clean) || "手动保存草稿", {
+    story_summary: documentSummary(clean),
+    story_text: clean,
+    scenes: state.scenes || [],
+  });
+  storyHistoryVisible = true;
+  renderStoryHistoryPanel();
+  renderAssistantPlan();
+  window.alert("草稿已保存。");
+}
+
+function applyStoryDraftHistoryItem(item) {
+  if (!item) return;
+  state.assistantPrompt = item.prompt || "";
+  state.storySummary = item.story_summary || documentSummary(item.story_text || "");
+  state.storyText = item.story_text || "";
+  state.scenes = (item.scenes || []).map((scene) => ({
+    title: scene.title || "",
+    prompt: scene.prompt || "",
+    subtitle: scene.subtitle || "",
+    duration_s: Number(scene.duration_s || 4),
+    characterIds: [...state.characterIds],
+  }));
+  mergeParsedCharacters(parseCharactersFromStoryText(state.storyText || ""));
+  state.activeSceneIndex = 0;
+  setGlobalStatus("已载入历史草稿", "done");
+  if ($("job_hint")) $("job_hint").textContent = "已载入历史草稿，可继续编辑正文、分镜和素材配置。";
+  renderAll();
+}
+
+function storyDraftHistoryListMarkup() {
+  if (!storyDraftHistory.length) return "";
+  return `
+    <div class="assistant-draft-list">
+      ${storyDraftHistory.map((item) => `
+        <button class="assistant-draft-item" type="button" data-draft-history-id="${item.id}">
+          <strong>${item.story_summary || item.prompt || "未命名草稿"}</strong>
+          <span>${new Intl.DateTimeFormat("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).format(new Date(item.created_at || Date.now()))}</span>
+        </button>
+      `).join("")}
+    </div>
+  `;
+}
+
+function renderStoryDraftHistory() {
+  const listMarkup = storyDraftHistoryListMarkup();
+  if (!listMarkup) return "";
+  return `
+    <div class="assistant-card assistant-card--history">
+      <h3>历史草稿</h3>
+      ${listMarkup}
+    </div>
+  `;
+}
+
+function renderStoryHistoryPanel() {
+  const panel = $("story_history_panel");
+  if (!panel) return;
+  panel.hidden = !storyHistoryVisible;
+  if (!storyHistoryVisible) {
+    panel.innerHTML = "";
+    return;
+  }
+  const listMarkup = storyDraftHistoryListMarkup();
+  panel.innerHTML = listMarkup || '<div class="story-history-empty">暂无历史草稿。生成或保存一版后会显示在这里。</div>';
+}
+
 function renderAssistantThread() {
   const thread = $("assistant_thread");
   if (!thread) return;
@@ -735,8 +867,9 @@ function renderAssistantThread() {
 function renderAssistantPlan() {
   const plan = $("assistant_plan");
   if (!plan) return;
+  const historyMarkup = renderStoryDraftHistory();
   if (!availableStoryAssistants.length || !state.storySummary) {
-    plan.innerHTML = "";
+    plan.innerHTML = historyMarkup;
     return;
   }
   plan.innerHTML = `
@@ -745,6 +878,7 @@ function renderAssistantPlan() {
         <div class="assistant-card__meta">${styleById(state.visualStyleId)?.name || "默认风格"} · ${state.scenes.length} 个分镜 · ${state.aspectRatio || "未设置比例"}</div>
         <div class="assistant-card__summary">${state.storySummary}</div>
       </div>
+      ${historyMarkup}
   `;
 }
 
@@ -1399,7 +1533,13 @@ function renderCharacterTab() {
             <strong>${item.name}</strong>
             <span>${item.description || ""}</span>
           </article>
-        `).join("") : '<div class="tasks-empty"><h3>该分组暂无角色</h3><p>先去配置中心为这个分组创建角色素材。</p></div>'}
+        `).join("") : `
+          <div class="character-empty-state">
+            <strong>该分组暂无角色素材</strong>
+            <span>在配置中心创建角色素材后，会出现在这里用于绑定分镜。</span>
+            <a href="/config?tab=materials" class="btn btn--secondary">去配置素材</a>
+          </div>
+        `}
       </div>
     </div>
   `;
@@ -1493,6 +1633,7 @@ function renderAll() {
   renderStoryAssistantSelect();
   renderImageAssistantSelect();
   renderStoryEditors();
+  renderStoryHistoryPanel();
   renderSceneList();
   renderProviderSelect();
   renderResourcePanel();
@@ -1547,6 +1688,7 @@ async function generateDraft() {
       duration_s: Number(scene.duration_s || 4),
       characterIds: [...state.characterIds],
     }));
+    rememberStoryDraft(prompt, draft);
     mergeParsedCharacters(parseCharactersFromStoryText(draft.story_text || ""));
     state.activeSceneIndex = 0;
     setGlobalStatus("故事草稿已生成", "done");
@@ -1801,6 +1943,11 @@ function applyTemplateDefaults() {
 
 function attachStudioEvents() {
   $("assistant_generate")?.addEventListener("click", generateDraft);
+  $("save_story_draft")?.addEventListener("click", saveCurrentStoryDraft);
+  $("toggle_story_history")?.addEventListener("click", () => {
+    storyHistoryVisible = !storyHistoryVisible;
+    renderStoryHistoryPanel();
+  });
   $("add_scene")?.addEventListener("click", addScene);
   $("submit")?.addEventListener("click", submitJob);
   $("character_binding_toggle")?.addEventListener("click", () => {
@@ -1810,8 +1957,12 @@ function attachStudioEvents() {
 
   document.addEventListener("click", (event) => {
     if (!pageIsStudio()) return;
-    const target = event.target.closest("[data-tab], [data-style-id], [data-character-id], [data-character-group], [data-voice-id], [data-music-id], [data-voice-filter], [data-music-filter], [data-action], [data-parsed-character-id], [data-character-generate], [data-character-unbind], [data-character-preview-confirm], [data-character-preview-discard], [data-frame-generate], [data-frame-clear], .scene-card");
+    const target = event.target.closest("[data-draft-history-id], [data-tab], [data-style-id], [data-character-id], [data-character-group], [data-voice-id], [data-music-id], [data-voice-filter], [data-music-filter], [data-action], [data-parsed-character-id], [data-character-generate], [data-character-unbind], [data-character-preview-confirm], [data-character-preview-discard], [data-frame-generate], [data-frame-clear], .scene-card");
     if (!target) return;
+    if (target.dataset.draftHistoryId) {
+      applyStoryDraftHistoryItem(storyDraftHistory.find((item) => item.id === target.dataset.draftHistoryId));
+      return;
+    }
     if (target.dataset.tab) {
       state.activeTab = target.dataset.tab;
       if (state.activeTab !== "character") state.characterBindingMode = false;
@@ -2019,6 +2170,7 @@ async function initStudio() {
     state.storyAssistantCode = availableStoryAssistants[0]?.assistant_code || "";
     state.characterImageAssistantCode = availableCharacterImageAssistants[0]?.assistant_code || "";
     state.characterGroup = characterGroups()[0] || "默认分组";
+    loadStoryDraftHistory();
     syncMaterialSelections();
     renderAll();
     attachStudioEvents();
@@ -2578,7 +2730,6 @@ function renderStoryAssistantCard(config) {
         </label>
         <div class="provider-card__meta">
           <span>Assistant Code：${config.assistant_code || "待填写"}</span>
-          <span>协议：${config.protocol || "openai"}</span>
           <span>模型：${config.model || "未填写"}</span>
           <span>最近校验：${parseDate(config.last_checked_at)}</span>
         </div>
@@ -2641,6 +2792,10 @@ function renderStoryAssistantCard(config) {
               <span>Temperature</span>
               <input type="number" step="0.1" min="0" max="2" data-story-assistant-field="${prefix}:temperature" value="${config.temperature ?? 0.7}" />
             </label>
+            <div class="provider-field provider-field--actions">
+              <span>连接测试</span>
+              <button class="btn btn--secondary" type="button" data-story-assistant-test="${prefix}:${config.__draft ? "draft" : "persisted"}">测试连接</button>
+            </div>
           </div>
         </section>
 
@@ -2659,6 +2814,7 @@ function renderStoryAssistantCard(config) {
         </div>
         <div class="provider-card__actions">
           <button class="btn btn--ghost" type="button" data-story-assistant-validate="${prefix}:${config.__draft ? "draft" : "persisted"}">校验配置</button>
+          <button class="btn btn--danger" type="button" data-story-assistant-delete="${prefix}:${config.__draft ? "draft" : "persisted"}">删除</button>
           <button class="btn btn--primary" type="button" data-story-assistant-save="${prefix}:${config.__draft ? "draft" : "persisted"}">保存配置</button>
         </div>
         <p class="provider-card__error" id="story_assistant_error_${prefix}">${config.last_error || ""}</p>
@@ -2747,7 +2903,6 @@ function renderCharacterImageAssistantCard(config) {
         </label>
         <div class="provider-card__meta">
           <span>Assistant Code：${config.assistant_code || "待填写"}</span>
-          <span>协议：${config.protocol || "openai"}</span>
           <span>模型：${config.model || "未填写"}</span>
           <span>最近校验：${parseDate(config.last_checked_at)}</span>
         </div>
@@ -2778,13 +2933,6 @@ function renderCharacterImageAssistantCard(config) {
               <span>排序</span>
               <input type="number" data-character-image-assistant-field="${prefix}:sort_order" value="${config.sort_order ?? 100}" />
             </label>
-            <label class="provider-field">
-              <span>协议</span>
-              <select data-character-image-assistant-field="${prefix}:protocol">
-                <option value="openai" ${((config.protocol || "openai") === "openai") ? "selected" : ""}>OpenAI</option>
-                <option value="anthropic" ${((config.protocol || "openai") === "anthropic") ? "selected" : ""}>Anthropic</option>
-              </select>
-            </label>
           </div>
         </section>
 
@@ -2796,16 +2944,20 @@ function renderCharacterImageAssistantCard(config) {
           <div class="provider-form provider-form--two-col">
             <label class="provider-field">
               <span>Base URL</span>
-              <input type="text" data-character-image-assistant-field="${prefix}:base_url" value="${config.base_url || ""}" placeholder="${(config.protocol || "openai") === "anthropic" ? "https://api.anthropic.com/v1" : "https://api.openai.com/v1"}" />
+              <input type="text" data-character-image-assistant-field="${prefix}:base_url" value="${config.base_url || ""}" placeholder="https://api.example.com/v1/images/generations" />
             </label>
             <label class="provider-field">
               <span>Model</span>
-              <input type="text" data-character-image-assistant-field="${prefix}:model" value="${config.model || ""}" placeholder="${(config.protocol || "openai") === "anthropic" ? "claude-sonnet-4-5" : "gpt-image-1"}" />
+              <input type="text" data-character-image-assistant-field="${prefix}:model" value="${config.model || ""}" placeholder="gpt-image-1" />
             </label>
             <label class="provider-field">
               <span>API Key</span>
               <input type="password" data-character-image-assistant-field="${prefix}:api_key" value="${config.api_key || ""}" />
             </label>
+            <div class="provider-field provider-field--actions">
+              <span>连接测试</span>
+              <button class="btn btn--secondary" type="button" data-character-image-assistant-test="${prefix}:${config.__draft ? "draft" : "persisted"}">测试连接</button>
+            </div>
           </div>
         </section>
 
@@ -2824,6 +2976,7 @@ function renderCharacterImageAssistantCard(config) {
         </div>
         <div class="provider-card__actions">
           <button class="btn btn--ghost" type="button" data-character-image-assistant-validate="${prefix}:${config.__draft ? "draft" : "persisted"}">校验配置</button>
+          <button class="btn btn--danger" type="button" data-character-image-assistant-delete="${prefix}:${config.__draft ? "draft" : "persisted"}">删除</button>
           <button class="btn btn--primary" type="button" data-character-image-assistant-save="${prefix}:${config.__draft ? "draft" : "persisted"}">保存配置</button>
         </div>
         <p class="provider-card__error" id="character_image_assistant_error_${prefix}">${config.last_error || ""}</p>
@@ -3250,6 +3403,72 @@ async function initConfigCenter() {
 
   document.addEventListener("change", (event) => {
     if (!pageIsProviders()) return;
+    const providerToggle = event.target.closest("[data-provider-toggle]");
+    if (providerToggle) {
+      const providerCode = providerToggle.dataset.providerToggle;
+      const errorNode = $(`provider_error_${providerCode}`);
+      const payload = collectProviderForm(providerCode);
+      if (errorNode) errorNode.textContent = "正在保存启用状态...";
+      updateProviderConfig(providerCode, payload)
+        .then(loadProviderConfigsIntoState)
+        .then(() => {
+          if (errorNode) errorNode.textContent = "启用状态已生效。";
+          renderConfigPanels();
+        })
+        .catch((error) => {
+          if (errorNode) errorNode.textContent = error.message;
+          providerToggle.checked = !providerToggle.checked;
+        });
+      return;
+    }
+    const storyToggle = event.target.closest("[data-story-assistant-field]");
+    if (storyToggle?.dataset.storyAssistantField?.endsWith(":enabled")) {
+      const prefix = storyToggle.dataset.storyAssistantField.split(":")[0];
+      const payload = collectStoryAssistantForm(prefix);
+      const assistantCode = (payload.assistant_code || "").trim();
+      const errorNode = $(`story_assistant_error_${prefix}`);
+      if (!assistantCode || prefix.startsWith("draft-")) {
+        if (errorNode) errorNode.textContent = "新增助手请先保存配置，再启用。";
+        storyToggle.checked = !storyToggle.checked;
+        return;
+      }
+      if (errorNode) errorNode.textContent = "正在保存启用状态...";
+      updateStoryAssistantConfig(assistantCode, payload)
+        .then(loadStoryAssistantConfigsIntoState)
+        .then(() => {
+          if (errorNode) errorNode.textContent = "启用状态已生效。";
+          renderConfigPanels();
+        })
+        .catch((error) => {
+          if (errorNode) errorNode.textContent = error.message;
+          storyToggle.checked = !storyToggle.checked;
+        });
+      return;
+    }
+    const characterImageToggle = event.target.closest("[data-character-image-assistant-field]");
+    if (characterImageToggle?.dataset.characterImageAssistantField?.endsWith(":enabled")) {
+      const prefix = characterImageToggle.dataset.characterImageAssistantField.split(":")[0];
+      const payload = collectCharacterImageAssistantForm(prefix);
+      const assistantCode = (payload.assistant_code || "").trim();
+      const errorNode = $(`character_image_assistant_error_${prefix}`);
+      if (!assistantCode || prefix.startsWith("draft-")) {
+        if (errorNode) errorNode.textContent = "新增助手请先保存配置，再启用。";
+        characterImageToggle.checked = !characterImageToggle.checked;
+        return;
+      }
+      if (errorNode) errorNode.textContent = "正在保存启用状态...";
+      updateCharacterImageAssistantConfig(assistantCode, payload)
+        .then(loadCharacterImageAssistantConfigsIntoState)
+        .then(() => {
+          if (errorNode) errorNode.textContent = "启用状态已生效。";
+          renderConfigPanels();
+        })
+        .catch((error) => {
+          if (errorNode) errorNode.textContent = error.message;
+          characterImageToggle.checked = !characterImageToggle.checked;
+        });
+      return;
+    }
     const input = event.target.closest("[data-material-file]");
     if (!input) return;
     const key = input.dataset.materialFile;
@@ -3266,10 +3485,14 @@ async function initConfigCenter() {
     const saveButton = event.target.closest("[data-provider-save]");
     const storyAssistantCreateButton = event.target.closest("[data-story-assistant-create]");
     const storyAssistantValidateButton = event.target.closest("[data-story-assistant-validate]");
+    const storyAssistantTestButton = event.target.closest("[data-story-assistant-test]");
     const storyAssistantSaveButton = event.target.closest("[data-story-assistant-save]");
+    const storyAssistantDeleteButton = event.target.closest("[data-story-assistant-delete]");
     const characterImageAssistantCreateButton = event.target.closest("[data-character-image-assistant-create]");
     const characterImageAssistantValidateButton = event.target.closest("[data-character-image-assistant-validate]");
+    const characterImageAssistantTestButton = event.target.closest("[data-character-image-assistant-test]");
     const characterImageAssistantSaveButton = event.target.closest("[data-character-image-assistant-save]");
+    const characterImageAssistantDeleteButton = event.target.closest("[data-character-image-assistant-delete]");
     const materialCreateButton = event.target.closest("[data-material-create]");
     const materialSaveButton = event.target.closest("[data-material-save]");
     const materialDeleteButton = event.target.closest("[data-material-delete]");
@@ -3320,7 +3543,7 @@ async function initConfigCenter() {
       renderConfigPanels();
       return;
     }
-    if (!validateButton && !saveButton && !storyAssistantValidateButton && !storyAssistantSaveButton && !characterImageAssistantValidateButton && !characterImageAssistantSaveButton && !materialCreateButton && !materialSaveButton && !materialDeleteButton) return;
+    if (!validateButton && !saveButton && !storyAssistantValidateButton && !storyAssistantTestButton && !storyAssistantSaveButton && !storyAssistantDeleteButton && !characterImageAssistantValidateButton && !characterImageAssistantTestButton && !characterImageAssistantSaveButton && !characterImageAssistantDeleteButton && !materialCreateButton && !materialSaveButton && !materialDeleteButton) return;
 
     const providerCode = validateButton?.dataset.providerValidate || saveButton?.dataset.providerSave;
     const payload = providerCode ? collectProviderForm(providerCode) : null;
@@ -3342,17 +3565,29 @@ async function initConfigCenter() {
         await loadProviderConfigsIntoState();
         renderConfigPanels();
       }
-      if (storyAssistantValidateButton || storyAssistantSaveButton) {
-        const [prefix, mode] = (storyAssistantValidateButton?.dataset.storyAssistantValidate || storyAssistantSaveButton?.dataset.storyAssistantSave).split(":");
+      if (storyAssistantValidateButton || storyAssistantTestButton || storyAssistantSaveButton || storyAssistantDeleteButton) {
+        const [prefix, mode] = (storyAssistantValidateButton?.dataset.storyAssistantValidate || storyAssistantTestButton?.dataset.storyAssistantTest || storyAssistantSaveButton?.dataset.storyAssistantSave || storyAssistantDeleteButton?.dataset.storyAssistantDelete).split(":");
         const payload = collectStoryAssistantForm(prefix);
         const assistantCode = (payload.assistant_code || "").trim();
         const storyAssistantErrorNode = $(`story_assistant_error_${prefix}`);
         failureNode = storyAssistantErrorNode;
         if (storyAssistantErrorNode) storyAssistantErrorNode.textContent = "";
-        if (!assistantCode) throw new Error("助手标识不能为空");
+        if (!assistantCode && !storyAssistantDeleteButton) throw new Error("助手标识不能为空");
         if (storyAssistantValidateButton) {
           const result = await validateStoryAssistantConfig(assistantCode, payload);
           if (storyAssistantErrorNode) storyAssistantErrorNode.textContent = result.ok ? "配置校验通过。" : (result.errors || []).join("；");
+        }
+        if (storyAssistantTestButton) {
+          storyAssistantTestButton.disabled = true;
+          storyAssistantTestButton.textContent = "测试中...";
+          const result = await testStoryAssistantConfig(assistantCode, payload);
+          if (result.ok) {
+            window.alert(result.message || "连接测试通过。");
+          } else {
+            window.alert((result.errors || []).join("；") || "连接测试失败。");
+          }
+          storyAssistantTestButton.disabled = false;
+          storyAssistantTestButton.textContent = "测试连接";
         }
         if (storyAssistantSaveButton) {
           await updateStoryAssistantConfig(assistantCode, payload);
@@ -3364,18 +3599,41 @@ async function initConfigCenter() {
           await loadStoryAssistantConfigsIntoState();
           renderConfigPanels();
         }
+        if (storyAssistantDeleteButton) {
+          if (mode === "draft") {
+            const index = pendingStoryAssistantDrafts.findIndex((item) => item.id === prefix);
+            if (index >= 0) pendingStoryAssistantDrafts.splice(index, 1);
+          } else {
+            await deleteStoryAssistantConfig(assistantCode);
+            await loadStoryAssistantConfigsIntoState();
+          }
+          activeConfigSection = pendingStoryAssistantDrafts[0]?.id || storyAssistantConfigs[0]?.assistant_code || "";
+          renderConfigPanels();
+        }
       }
-      if (characterImageAssistantValidateButton || characterImageAssistantSaveButton) {
-        const [prefix, mode] = (characterImageAssistantValidateButton?.dataset.characterImageAssistantValidate || characterImageAssistantSaveButton?.dataset.characterImageAssistantSave).split(":");
+      if (characterImageAssistantValidateButton || characterImageAssistantTestButton || characterImageAssistantSaveButton || characterImageAssistantDeleteButton) {
+        const [prefix, mode] = (characterImageAssistantValidateButton?.dataset.characterImageAssistantValidate || characterImageAssistantTestButton?.dataset.characterImageAssistantTest || characterImageAssistantSaveButton?.dataset.characterImageAssistantSave || characterImageAssistantDeleteButton?.dataset.characterImageAssistantDelete).split(":");
         const payload = collectCharacterImageAssistantForm(prefix);
         const assistantCode = (payload.assistant_code || "").trim();
         const characterImageErrorNode = $(`character_image_assistant_error_${prefix}`);
         failureNode = characterImageErrorNode;
         if (characterImageErrorNode) characterImageErrorNode.textContent = "";
-        if (!assistantCode) throw new Error("助手标识不能为空");
+        if (!assistantCode && !characterImageAssistantDeleteButton) throw new Error("助手标识不能为空");
         if (characterImageAssistantValidateButton) {
           const result = await validateCharacterImageAssistantConfig(assistantCode, payload);
           if (characterImageErrorNode) characterImageErrorNode.textContent = result.ok ? "配置校验通过。" : (result.errors || []).join("；");
+        }
+        if (characterImageAssistantTestButton) {
+          characterImageAssistantTestButton.disabled = true;
+          characterImageAssistantTestButton.textContent = "测试中...";
+          const result = await testCharacterImageAssistantConfig(assistantCode, payload);
+          if (result.ok) {
+            window.alert(result.message || "连接测试通过。");
+          } else {
+            window.alert((result.errors || []).join("；") || "连接测试失败。");
+          }
+          characterImageAssistantTestButton.disabled = false;
+          characterImageAssistantTestButton.textContent = "测试连接";
         }
         if (characterImageAssistantSaveButton) {
           await updateCharacterImageAssistantConfig(assistantCode, payload);
@@ -3385,6 +3643,17 @@ async function initConfigCenter() {
             activeConfigSection = assistantCode;
           }
           await loadCharacterImageAssistantConfigsIntoState();
+          renderConfigPanels();
+        }
+        if (characterImageAssistantDeleteButton) {
+          if (mode === "draft") {
+            const index = pendingCharacterImageAssistantDrafts.findIndex((item) => item.id === prefix);
+            if (index >= 0) pendingCharacterImageAssistantDrafts.splice(index, 1);
+          } else {
+            await deleteCharacterImageAssistantConfig(assistantCode);
+            await loadCharacterImageAssistantConfigsIntoState();
+          }
+          activeConfigSection = pendingCharacterImageAssistantDrafts[0]?.id || characterImageAssistantConfigs[0]?.assistant_code || "";
           renderConfigPanels();
         }
       }
@@ -3420,6 +3689,14 @@ async function initConfigCenter() {
         renderMaterialConfigPanel();
       }
     } catch (error) {
+      if (storyAssistantTestButton) {
+        storyAssistantTestButton.disabled = false;
+        storyAssistantTestButton.textContent = "测试连接";
+      }
+      if (characterImageAssistantTestButton) {
+        characterImageAssistantTestButton.disabled = false;
+        characterImageAssistantTestButton.textContent = "测试连接";
+      }
       if (failureNode) failureNode.textContent = error.message;
       if (materialSaveButton || materialDeleteButton) {
         const [type, id] = (materialSaveButton?.dataset.materialSave || materialDeleteButton?.dataset.materialDelete).split(":");

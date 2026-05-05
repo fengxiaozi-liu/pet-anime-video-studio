@@ -469,6 +469,15 @@ class SqliteStoryAssistantConfigRepository:
             return
         self.upsert(config)
 
+    def delete(self, assistant_code: str) -> StoryAssistantConfig | None:
+        with self.db._lock, self.db.connect() as conn:
+            row = conn.execute("SELECT * FROM story_assistants WHERE assistant_code = ?", (assistant_code,)).fetchone()
+            if row is None:
+                return None
+            item = self._serialize(row)
+            conn.execute("DELETE FROM story_assistants WHERE assistant_code = ?", (assistant_code,))
+            return item
+
 
 class SqliteCharacterImageAssistantConfigRepository:
     def __init__(self, db: SqliteDatabase) -> None:
@@ -572,6 +581,18 @@ class SqliteCharacterImageAssistantConfigRepository:
         if current and (current.base_url or current.model or current.api_key):
             return
         self.upsert(config)
+
+    def delete(self, assistant_code: str) -> CharacterImageAssistantConfig | None:
+        with self.db._lock, self.db.connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM character_image_assistants WHERE assistant_code = ?",
+                (assistant_code,),
+            ).fetchone()
+            if row is None:
+                return None
+            item = self._serialize(row)
+            conn.execute("DELETE FROM character_image_assistants WHERE assistant_code = ?", (assistant_code,))
+            return item
 
 
 class SqliteAssetRepository:

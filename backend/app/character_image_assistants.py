@@ -21,20 +21,6 @@ def _get_t2i_dispatcher() -> "T2IDispatcher":
         _t2i_dispatcher = T2IDispatcher()
     return _t2i_dispatcher
 
-DEFAULT_CHARACTER_IMAGE_SYSTEM_PROMPT = """
-你是一个角色形象设计助手。请根据角色名称、角色描述和故事背景，为角色出图服务补全更完整的中文提示词。
-
-如果你返回文本，必须是严格 JSON，结构如下：
-{
-  "normalized_prompt": "适合角色出图模型的完整提示词",
-  "preview_image_url": "可直接访问的角色预览图 URL"
-}
-
-如果上游接口本身直接返回图片 URL 或 base64 图片，也允许直接返回，不必强行包装成文本。
-""".strip()
-
-SUPPORTED_CHARACTER_IMAGE_PROTOCOLS = {"openai", "anthropic"}
-
 # T2I Provider 列表（由 T2IDispatcher.supported_codes() 动态获取）
 _T2I_SUPPORTED_CODES: list[str] = []
 
@@ -75,7 +61,7 @@ def validate_character_image_assistant_config(config: dict[str, Any]) -> list[st
     校验 assistant 配置。
 
     支持两种模式：
-    - LLM 模式（默认）：校验 protocol / base_url / api_key / model
+    - 图片接口模式（默认）：校验 base_url / api_key / model，调用完整图片生成 URL
     - T2I 模式（type="t2i"）：由 T2IDispatcher.validate_provider_config() 校验
     """
     errors: list[str] = []
@@ -106,13 +92,10 @@ def validate_character_image_assistant_config(config: dict[str, Any]) -> list[st
             errors.append(f"T2I Provider 初始化失败: {exc}")
         return errors
 
-    # LLM 模式（默认行为）
-    protocol = str(config.get("protocol") or "openai").strip().lower()
+    # 图片接口模式（默认行为）
     base_url = str(config.get("base_url") or "").strip()
     api_key = str(config.get("api_key") or "").strip()
     model = str(config.get("model") or "").strip()
-    if protocol not in SUPPORTED_CHARACTER_IMAGE_PROTOCOLS:
-        errors.append("protocol 必须是 openai 或 anthropic")
     if not base_url:
         errors.append("缺少 base_url")
     else:
@@ -127,28 +110,16 @@ def validate_character_image_assistant_config(config: dict[str, Any]) -> list[st
 
 
 def _openai_image_url(base_url: str) -> str:
-    base = base_url.rstrip("/")
-    if base.endswith("/images/generations"):
-        return base
-    if base.endswith("/v1"):
-        return f"{base}/images/generations"
-    return f"{base}/v1/images/generations"
+    return base_url.strip()
 
 
 def _openai_task_url(base_url: str, task_id: str) -> str:
     base = base_url.rstrip("/")
-    if base.endswith("/v1"):
-        return f"{base}/tasks/{task_id}"
-    return f"{base}/v1/tasks/{task_id}"
-
-
-def _anthropic_messages_url(base_url: str) -> str:
-    base = base_url.rstrip("/")
-    if base.endswith("/messages"):
-        return base
-    if base.endswith("/v1"):
-        return f"{base}/messages"
-    return f"{base}/v1/messages"
+    if base.endswith("/images/generations"):
+        base = base[: -len("/images/generations")]
+    if not base.endswith("/v1"):
+        base = f"{base}/v1"
+    return f"{base}/tasks/{task_id}"
 
 
 def _extract_text_content(content: Any) -> str:
@@ -184,6 +155,9 @@ def _extract_candidate_url(payload: Any) -> str:
         value = str(payload.get(key) or "").strip()
         if value:
             return value
+    image_urls = payload.get("image_urls")
+    if isinstance(image_urls, list) and image_urls:
+        return _extract_candidate_url(image_urls)
 
     for key in ("result", "image", "data", "output", "outputs"):
         if key in payload:
@@ -255,6 +229,12 @@ def _raise_payload_error(payload: dict[str, Any]) -> None:
         or ""
     ).strip()
     code = str(payload.get("code") or "").strip()
+    base_resp = payload.get("base_resp")
+    if isinstance(base_resp, dict):
+        status_code = base_resp.get("status_code")
+        status_msg = str(base_resp.get("status_msg") or "").strip()
+        if status_code not in (None, 0, "0") and status_msg:
+            raise ValueError(f"生图助手返回错误：[{status_code}] {status_msg}")
     if message:
         prefix = f"[{code}] " if code else ""
         raise ValueError(f"生图助手未返回图片结果：{prefix}{message}")
@@ -447,34 +427,6 @@ def _poll_modelscope_task(
     raise ValueError("生图助手任务轮询超时，请稍后重试")
 
 
-def _normalize_anthropic_response(data: dict[str, Any], storage_service, *, filename_hint: str) -> dict[str, Any]:
-    _raise_payload_error(data)
-    if _extract_candidate_url(data):
-        return {
-            "preview_image_url": _cache_preview_url(storage_service, preview_url=_extract_candidate_url(data), filename_hint=filename_hint),
-            "normalized_prompt": str(data.get("normalized_prompt") or "").strip(),
-        }
-    content = _extract_text_content(data.get("content"))
-    if not content:
-        raise ValueError("生图助手未返回文本内容")
-    payload = _extract_json_payload(content)
-    _raise_payload_error(payload)
-    preview_url = _extract_candidate_url(payload)
-    normalized_prompt = str(payload.get("normalized_prompt") or "").strip()
-    if preview_url:
-        return {
-            "preview_image_url": _cache_preview_url(storage_service, preview_url=preview_url, filename_hint=filename_hint),
-            "normalized_prompt": normalized_prompt,
-        }
-    b64_json = _extract_base64_payload(payload)
-    if not b64_json:
-        _raise_missing_image_with_prompt(normalized_prompt)
-        raise ValueError("生图助手返回缺少可识别的图片字段")
-    image_bytes = base64.b64decode(b64_json)
-    preview_url = _save_temp_preview(storage_service, image_bytes=image_bytes, extension=".png", filename_hint=filename_hint)
-    return {"preview_image_url": preview_url, "normalized_prompt": normalized_prompt}
-
-
 def generate_character_preview(
     assistant_config: dict[str, Any],
     *,
@@ -576,35 +528,13 @@ def generate_character_preview(
         )
 
     # ---------------------------------------------------------------
-    # LLM 模式（原有直接调用 OpenAI/Anthropic API 的逻辑）
+    # 图片接口模式：按完整图片生成 URL 调用，并从响应中提取图片 URL/base64。
     # ---------------------------------------------------------------
-    protocol = str(assistant_config.get("protocol") or "openai").strip().lower()
     timeout = httpx.Timeout(120.0, connect=20.0)
-
-    if protocol == "anthropic":
-        payload = {
-            "model": assistant_config["model"],
-            "system": str(assistant_config.get("system_prompt") or "").strip() or DEFAULT_CHARACTER_IMAGE_SYSTEM_PROMPT,
-            "messages": [{"role": "user", "content": prompt}],
-            "max_tokens": 2000,
-        }
-        headers = {
-            "x-api-key": str(assistant_config["api_key"]),
-            "anthropic-version": "2023-06-01",
-            "content-type": "application/json",
-        }
-        url = _anthropic_messages_url(str(assistant_config["base_url"]))
-        with httpx.Client(timeout=timeout) as client:
-            response = client.post(url, headers=headers, json=payload)
-            _raise_for_provider_status(response)
-            data = response.json()
-        result = _normalize_anthropic_response(data, storage_service, filename_hint=filename_hint)
-        return {**result, "normalized_prompt": result.get("normalized_prompt") or prompt}
 
     payload = {
         "model": assistant_config["model"],
         "prompt": prompt,
-        "size": "1024x1024",
     }
     headers = {
         "Authorization": f"Bearer {assistant_config['api_key']}",
@@ -612,8 +542,6 @@ def generate_character_preview(
     }
     if _is_modelscope_openai_compatible(str(assistant_config["base_url"])):
         headers["X-ModelScope-Async-Mode"] = "true"
-    else:
-        payload["response_format"] = "b64_json"
     url = _openai_image_url(str(assistant_config["base_url"]))
     with httpx.Client(timeout=timeout) as client:
         response = client.post(url, headers=headers, json=payload)

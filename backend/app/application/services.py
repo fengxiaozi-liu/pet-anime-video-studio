@@ -202,6 +202,18 @@ class StoryAssistantConfigService:
     def validate(self, payload: dict[str, Any]) -> list[str]:
         return validate_story_assistant_config(payload)
 
+    def test_connection(self, payload: dict[str, Any]) -> dict[str, Any]:
+        draft = generate_story_draft(
+            payload,
+            prompt="测试连接：请生成一个 1 个分镜的短视频故事草稿。",
+            aspect_ratio="9:16",
+            template_name="测试模板",
+            visual_style_name="简洁写实",
+            visual_style_prompt="自然光，清晰构图",
+            characters=[],
+        )
+        return {"ok": True, "message": "故事助手连接测试通过", "sample": draft.get("story_summary", "")}
+
     def update(self, assistant_code: str, payload: dict[str, Any]) -> dict[str, Any]:
         errors = self.validate(payload)
         config = StoryAssistantConfig(
@@ -223,6 +235,10 @@ class StoryAssistantConfigService:
             updated_at=time.time(),
         )
         return asdict(self.assistant_repo.upsert(config))
+
+    def delete(self, assistant_code: str) -> dict[str, Any] | None:
+        deleted = self.assistant_repo.delete(assistant_code)
+        return asdict(deleted) if deleted else None
 
     def generate(
         self,
@@ -301,6 +317,19 @@ class CharacterImageAssistantConfigService:
     def validate(self, payload: dict[str, Any]) -> list[str]:
         return validate_character_image_assistant_config(payload)
 
+    def test_connection(self, payload: dict[str, Any]) -> dict[str, Any]:
+        result = generate_character_preview(
+            payload,
+            storage_service=self.storage,
+            character_name="测试角色",
+            character_description="一个用于验证生图助手连接的简洁人物形象。",
+            story_summary="测试连接场景。",
+            story_setting="干净背景，自然光。",
+            visual_style_name="简洁写实",
+            visual_style_prompt="清晰构图，单人半身像。",
+        )
+        return {"ok": True, "message": "生图助手连接测试通过", "preview_image_url": result.get("preview_image_url", "")}
+
     def update(self, assistant_code: str, payload: dict[str, Any]) -> dict[str, Any]:
         errors = self.validate(payload)
         config = CharacterImageAssistantConfig(
@@ -321,6 +350,10 @@ class CharacterImageAssistantConfigService:
             updated_at=time.time(),
         )
         return asdict(self.assistant_repo.upsert(config))
+
+    def delete(self, assistant_code: str) -> dict[str, Any] | None:
+        deleted = self.assistant_repo.delete(assistant_code)
+        return asdict(deleted) if deleted else None
 
     def generate(
         self,
