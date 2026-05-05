@@ -55,7 +55,7 @@ let materialConfigs = { visuals: [], frames: [], characters: [], voices: [], mus
 let platformTemplates = [];
 let pollingTimer = null;
 let activeMaterialConfigTab = "visuals";
-let activeConfigTab = "providers";
+let activeConfigTab = "assistants";
 let activeConfigSection = "jimeng";
 const pendingMaterialDrafts = { visuals: [], frames: [], characters: [], voices: [], music: [] };
 const pendingStoryAssistantDrafts = [];
@@ -71,6 +71,10 @@ function page() {
 
 function pageIsStudio() {
   return page() === "studio";
+}
+
+function pageIsHome() {
+  return page() === "home";
 }
 
 function pageIsTasks() {
@@ -459,6 +463,11 @@ async function fetchMaterialConfigs() {
     voices: data.voices || [],
     music: data.music || [],
   };
+}
+
+function setText(id, value) {
+  const node = $(id);
+  if (node) node.textContent = value;
 }
 
 async function createMaterialConfig(type, item, file) {
@@ -1121,6 +1130,17 @@ function renderProviderSelect() {
   select.value = state.provider;
 }
 
+function renderAssistantConfigSummary() {
+  const node = $("assistant_config_summary");
+  if (!node) return;
+  const items = [
+    availableStoryAssistants.length ? "故事已选" : "故事未配置",
+    availableCharacterImageAssistants.length ? "生图已选" : "生图未配置",
+    availableProviders.length ? "视频已选" : "视频未配置",
+  ];
+  node.textContent = items.join(" · ");
+}
+
 function renderResourceNote() {
   const note = $("resource_note");
   if (!note) return;
@@ -1476,6 +1496,7 @@ function renderAll() {
   renderSceneList();
   renderProviderSelect();
   renderResourcePanel();
+  renderAssistantConfigSummary();
 }
 
 function log(msg) {
@@ -1930,6 +1951,7 @@ function attachStudioEvents() {
       }
       state.provider = event.target.value;
       renderResourceNote();
+      renderAssistantConfigSummary();
     }
     if (event.target.id === "story_assistant_select") {
       if (event.target.value === "__config__") {
@@ -1937,6 +1959,7 @@ function attachStudioEvents() {
         return;
       }
       state.storyAssistantCode = event.target.value;
+      renderAssistantConfigSummary();
     }
     if (event.target.id === "image_assistant_select" || event.target.id === "character_image_assistant_select") {
       if (event.target.value === "__config__") {
@@ -1945,6 +1968,7 @@ function attachStudioEvents() {
       }
       state.characterImageAssistantCode = event.target.value;
       renderResourcePanel();
+      renderAssistantConfigSummary();
     }
     if (event.target.id === "aspect_ratio") {
       state.aspectRatio = event.target.value;
@@ -2013,6 +2037,67 @@ async function initStudio() {
 function jobShortId(job) {
   const id = job.job_id || "";
   return id ? `${id.slice(0, 8)}...` : "未知任务";
+}
+
+function countMaterialItems(configs) {
+  return Object.values(configs || {}).reduce((total, items) => total + (Array.isArray(items) ? items.length : 0), 0);
+}
+
+function renderHomeChecklist({ providers, materialTotal, jobs }) {
+  const node = $("home_checklist");
+  if (!node) return;
+  const items = [
+    {
+      done: providers.length > 0,
+      label: providers.length > 0 ? "视频助手可用" : "先配置并校验视频助手",
+      href: providers.length > 0 ? "/studio" : "/config",
+    },
+    {
+      done: materialTotal > 0,
+      label: materialTotal > 0 ? "素材配置已准备" : "补充画面、角色、配音或音乐素材",
+      href: "/config?tab=materials",
+    },
+    {
+      done: jobs.length > 0,
+      label: jobs.length > 0 ? "继续在工作台创作" : "从工作台提交第一条生成任务",
+      href: "/studio",
+    },
+  ];
+  node.innerHTML = items.map((item) => `
+    <a class="home-check-item ${item.done ? "is-done" : ""}" href="${item.href}">
+      <span>${item.done ? "完成" : "待办"}</span>
+      <strong>${item.label}</strong>
+    </a>
+  `).join("");
+}
+
+async function initHomePage() {
+  try {
+    const [providers, materials, jobs] = await Promise.all([
+      fetchProviders(),
+      fetchMaterialConfigs(),
+      fetchJobs(5),
+    ]);
+    const materialTotal = countMaterialItems(materials);
+    const running = jobs.filter((job) => ["queued", "submitted", "running", "composing"].includes(job.status)).length;
+    const done = jobs.filter((job) => job.status === "done").length;
+
+    setText("home_provider_count", String(providers.length));
+    setText("home_provider_hint", providers.length ? "可直接提交生成" : "需要先完成配置");
+    setText("home_material_count", String(materialTotal));
+    setText("home_material_hint", materialTotal ? "可在工作台中选择" : "建议先补充素材");
+    setText("home_job_count", String(jobs.length));
+    setText("home_job_hint", running ? `${running} 个任务进行中` : (done ? `${done} 个任务已完成` : "暂无最近任务"));
+    setText("home_ready_state", providers.length ? "工作台可以开始创作" : "需要先配置视频助手");
+    renderHomeChecklist({ providers, materialTotal, jobs });
+  } catch (error) {
+    setText("home_ready_state", "状态加载失败，请稍后重试");
+    setText("home_provider_hint", "加载失败");
+    setText("home_material_hint", "加载失败");
+    setText("home_job_hint", "加载失败");
+    const checklist = $("home_checklist");
+    if (checklist) checklist.innerHTML = '<div class="home-check-item">暂时无法检查配置。</div>';
+  }
 }
 
 function renderTasksList(jobs) {
@@ -2268,6 +2353,10 @@ function providerDraft() {
   };
 }
 
+function configDetailsOpen(config) {
+  return config.__draft ? "open" : "";
+}
+
 function renderProviderConfigCard(config) {
   const fields = config.config_fields || [];
   const credentials = fields.filter((field) => field.key === "app_key" || field.key === "app_secret");
@@ -2298,18 +2387,20 @@ function renderProviderConfigCard(config) {
             <span class="provider-card__status-text">${statusText}</span>
           </div>
         </div>
-        <div class="provider-card__surface">
-          <div class="provider-card__row">
-            <label class="setting-toggle provider-card__toggle">
-              <input type="checkbox" data-provider-toggle="${config.provider_code}" ${config.enabled ? "checked" : ""} />
-              <span>启用为工作区可选视频助手</span>
-            </label>
-            <div class="provider-card__meta">
-              <span>助手标识：${config.provider_code}</span>
-              <span>最近校验：${parseDate(config.last_checked_at)}</span>
-            </div>
+        <div class="provider-card__summary-row">
+          <label class="setting-toggle provider-card__toggle">
+            <input type="checkbox" data-provider-toggle="${config.provider_code}" ${config.enabled ? "checked" : ""} />
+            <span>启用为工作区可选视频助手</span>
+          </label>
+          <div class="provider-card__meta">
+            <span>助手标识：${config.provider_code}</span>
+            <span>最近校验：${parseDate(config.last_checked_at)}</span>
           </div>
+        </div>
 
+        <details class="provider-card__details" ${configDetailsOpen(config)}>
+          <summary>展开配置</summary>
+          <div class="provider-card__surface">
           <section class="provider-section">
             <div class="provider-section__head">
               <strong>基础信息</strong>
@@ -2340,13 +2431,14 @@ function renderProviderConfigCard(config) {
               ${fields.map(renderField).join("")}
             </div>
           </section>
-        </div>
+          </div>
 
-        <div class="provider-card__actions">
-          <button class="btn btn--ghost" type="button" data-provider-validate="${config.provider_code}">校验配置</button>
-          <button class="btn btn--primary" type="button" data-provider-save="${config.provider_code}">保存配置</button>
-        </div>
-        <p class="provider-card__error" id="provider_error_${config.provider_code}">${config.last_error || ""}</p>
+          <div class="provider-card__actions">
+            <button class="btn btn--ghost" type="button" data-provider-validate="${config.provider_code}">校验配置</button>
+            <button class="btn btn--primary" type="button" data-provider-save="${config.provider_code}">保存配置</button>
+          </div>
+          <p class="provider-card__error" id="provider_error_${config.provider_code}">${config.last_error || ""}</p>
+        </details>
       </article>
     `;
   }
@@ -2364,18 +2456,20 @@ function renderProviderConfigCard(config) {
         </div>
       </div>
 
-      <div class="provider-card__surface">
-        <div class="provider-card__row">
-          <label class="setting-toggle provider-card__toggle">
-            <input type="checkbox" data-provider-toggle="${config.provider_code}" ${config.enabled ? "checked" : ""} />
-            <span>启用为工作区可选视频助手</span>
-          </label>
-          <div class="provider-card__meta">
-            <span>助手标识：${config.provider_code}</span>
-            <span>最近校验：${parseDate(config.last_checked_at)}</span>
-          </div>
+      <div class="provider-card__summary-row">
+        <label class="setting-toggle provider-card__toggle">
+          <input type="checkbox" data-provider-toggle="${config.provider_code}" ${config.enabled ? "checked" : ""} />
+          <span>启用为工作区可选视频助手</span>
+        </label>
+        <div class="provider-card__meta">
+          <span>助手标识：${config.provider_code}</span>
+          <span>最近校验：${parseDate(config.last_checked_at)}</span>
         </div>
+      </div>
 
+      <details class="provider-card__details" ${configDetailsOpen(config)}>
+        <summary>展开配置</summary>
+        <div class="provider-card__surface">
         <section class="provider-section">
           <div class="provider-section__head">
             <strong>基础凭证</strong>
@@ -2395,13 +2489,14 @@ function renderProviderConfigCard(config) {
             ${requestFields.map(renderField).join("")}
           </div>
         </section>
-      </div>
+        </div>
 
-      <div class="provider-card__actions">
-        <button class="btn btn--ghost" type="button" data-provider-validate="${config.provider_code}">校验配置</button>
-        <button class="btn btn--primary" type="button" data-provider-save="${config.provider_code}">保存配置</button>
-      </div>
-      <p class="provider-card__error" id="provider_error_${config.provider_code}">${config.last_error || ""}</p>
+        <div class="provider-card__actions">
+          <button class="btn btn--ghost" type="button" data-provider-validate="${config.provider_code}">校验配置</button>
+          <button class="btn btn--primary" type="button" data-provider-save="${config.provider_code}">保存配置</button>
+        </div>
+        <p class="provider-card__error" id="provider_error_${config.provider_code}">${config.last_error || ""}</p>
+      </details>
     </article>
   `;
 }
@@ -2476,18 +2571,22 @@ function renderStoryAssistantCard(config) {
           <span class="provider-card__status-text">${config.last_error || "配置完成后可在工作台中选择这个故事助手。"}</span>
         </div>
       </div>
-      <div class="provider-card__surface">
-        <div class="provider-card__row">
-          <label class="setting-toggle provider-card__toggle">
-            <input type="checkbox" data-story-assistant-field="${prefix}:enabled" ${config.enabled ? "checked" : ""} />
-            <span>启用为工作台可选故事助手</span>
-          </label>
-          <div class="provider-card__meta">
-            <span>Assistant Code：${config.assistant_code || "待填写"}</span>
-            <span>最近校验：${parseDate(config.last_checked_at)}</span>
-          </div>
+      <div class="provider-card__summary-row">
+        <label class="setting-toggle provider-card__toggle">
+          <input type="checkbox" data-story-assistant-field="${prefix}:enabled" ${config.enabled ? "checked" : ""} />
+          <span>启用为工作台可选故事助手</span>
+        </label>
+        <div class="provider-card__meta">
+          <span>Assistant Code：${config.assistant_code || "待填写"}</span>
+          <span>协议：${config.protocol || "openai"}</span>
+          <span>模型：${config.model || "未填写"}</span>
+          <span>最近校验：${parseDate(config.last_checked_at)}</span>
         </div>
+      </div>
 
+      <details class="provider-card__details" ${configDetailsOpen(config)}>
+        <summary>展开配置</summary>
+        <div class="provider-card__surface">
         <section class="provider-section">
           <div class="provider-section__head">
             <strong>基础信息</strong>
@@ -2557,12 +2656,13 @@ function renderStoryAssistantCard(config) {
             </label>
           </div>
         </section>
-      </div>
-      <div class="provider-card__actions">
-        <button class="btn btn--ghost" type="button" data-story-assistant-validate="${prefix}:${config.__draft ? "draft" : "persisted"}">校验配置</button>
-        <button class="btn btn--primary" type="button" data-story-assistant-save="${prefix}:${config.__draft ? "draft" : "persisted"}">保存配置</button>
-      </div>
-      <p class="provider-card__error" id="story_assistant_error_${prefix}">${config.last_error || ""}</p>
+        </div>
+        <div class="provider-card__actions">
+          <button class="btn btn--ghost" type="button" data-story-assistant-validate="${prefix}:${config.__draft ? "draft" : "persisted"}">校验配置</button>
+          <button class="btn btn--primary" type="button" data-story-assistant-save="${prefix}:${config.__draft ? "draft" : "persisted"}">保存配置</button>
+        </div>
+        <p class="provider-card__error" id="story_assistant_error_${prefix}">${config.last_error || ""}</p>
+      </details>
     </article>
   `;
 }
@@ -2640,18 +2740,22 @@ function renderCharacterImageAssistantCard(config) {
           <span class="provider-card__status-text">${config.last_error || "配置完成后可在工作台的角色绑定或收尾帧流程中选择该助手。"}</span>
         </div>
       </div>
-      <div class="provider-card__surface">
-        <div class="provider-card__row">
-          <label class="setting-toggle provider-card__toggle">
-            <input type="checkbox" data-character-image-assistant-field="${prefix}:enabled" ${config.enabled ? "checked" : ""} />
-            <span>启用为工作台可选生图助手</span>
-          </label>
-          <div class="provider-card__meta">
-            <span>Assistant Code：${config.assistant_code || "待填写"}</span>
-            <span>最近校验：${parseDate(config.last_checked_at)}</span>
-          </div>
+      <div class="provider-card__summary-row">
+        <label class="setting-toggle provider-card__toggle">
+          <input type="checkbox" data-character-image-assistant-field="${prefix}:enabled" ${config.enabled ? "checked" : ""} />
+          <span>启用为工作台可选生图助手</span>
+        </label>
+        <div class="provider-card__meta">
+          <span>Assistant Code：${config.assistant_code || "待填写"}</span>
+          <span>协议：${config.protocol || "openai"}</span>
+          <span>模型：${config.model || "未填写"}</span>
+          <span>最近校验：${parseDate(config.last_checked_at)}</span>
         </div>
+      </div>
 
+      <details class="provider-card__details" ${configDetailsOpen(config)}>
+        <summary>展开配置</summary>
+        <div class="provider-card__surface">
         <section class="provider-section">
           <div class="provider-section__head">
             <strong>基础信息</strong>
@@ -2717,12 +2821,13 @@ function renderCharacterImageAssistantCard(config) {
             </label>
           </div>
         </section>
-      </div>
-      <div class="provider-card__actions">
-        <button class="btn btn--ghost" type="button" data-character-image-assistant-validate="${prefix}:${config.__draft ? "draft" : "persisted"}">校验配置</button>
-        <button class="btn btn--primary" type="button" data-character-image-assistant-save="${prefix}:${config.__draft ? "draft" : "persisted"}">保存配置</button>
-      </div>
-      <p class="provider-card__error" id="character_image_assistant_error_${prefix}">${config.last_error || ""}</p>
+        </div>
+        <div class="provider-card__actions">
+          <button class="btn btn--ghost" type="button" data-character-image-assistant-validate="${prefix}:${config.__draft ? "draft" : "persisted"}">校验配置</button>
+          <button class="btn btn--primary" type="button" data-character-image-assistant-save="${prefix}:${config.__draft ? "draft" : "persisted"}">保存配置</button>
+        </div>
+        <p class="provider-card__error" id="character_image_assistant_error_${prefix}">${config.last_error || ""}</p>
+      </details>
     </article>
   `;
 }
@@ -2985,10 +3090,6 @@ function renderConfigPanels() {
   const materialsPanel = $("materials_config_panel");
   const title = $("config_content_title");
   const description = $("config_content_description");
-  const providersRefresh = $("providers_refresh");
-  const storyAssistantsRefresh = $("story_assistants_refresh");
-  const characterImageAssistantsRefresh = $("character_image_assistants_refresh");
-  const materialsRefresh = $("materials_refresh");
   if (!providersList || !materialsPanel || !title || !description) return;
 
   document.querySelectorAll(".settings-primary-tab").forEach((button) => {
@@ -3004,10 +3105,6 @@ function renderConfigPanels() {
     providersList.hidden = false;
     materialsPanel.hidden = true;
     materialsPanel.innerHTML = "";
-    if (providersRefresh) providersRefresh.hidden = false;
-    if (storyAssistantsRefresh) storyAssistantsRefresh.hidden = true;
-    if (characterImageAssistantsRefresh) characterImageAssistantsRefresh.hidden = true;
-    if (materialsRefresh) materialsRefresh.hidden = true;
     title.textContent = "视频助手";
     description.textContent = "管理视频生成能力的启用状态、鉴权信息与默认请求参数。";
     renderProvidersPage();
@@ -3021,10 +3118,6 @@ function renderConfigPanels() {
     providersList.hidden = false;
     materialsPanel.hidden = true;
     materialsPanel.innerHTML = "";
-    if (providersRefresh) providersRefresh.hidden = true;
-    if (storyAssistantsRefresh) storyAssistantsRefresh.hidden = false;
-    if (characterImageAssistantsRefresh) characterImageAssistantsRefresh.hidden = true;
-    if (materialsRefresh) materialsRefresh.hidden = true;
     title.textContent = "故事助手";
     description.textContent = "配置工作台用于生成故事与分镜的大模型助手，支持多个 OpenAI 兼容模型并在工作台切换。";
     renderStoryAssistantsPage();
@@ -3038,10 +3131,6 @@ function renderConfigPanels() {
     providersList.hidden = false;
     materialsPanel.hidden = true;
     materialsPanel.innerHTML = "";
-    if (providersRefresh) providersRefresh.hidden = true;
-    if (storyAssistantsRefresh) storyAssistantsRefresh.hidden = true;
-    if (characterImageAssistantsRefresh) characterImageAssistantsRefresh.hidden = false;
-    if (materialsRefresh) materialsRefresh.hidden = true;
     title.textContent = "生图助手";
     description.textContent = "配置统一的图片生成模型，供工作台角色图、首帧图和尾帧图流程调用。";
     renderCharacterImageAssistantsPage();
@@ -3054,10 +3143,6 @@ function renderConfigPanels() {
   providersList.hidden = true;
   materialsPanel.hidden = false;
   providersList.innerHTML = "";
-  if (providersRefresh) providersRefresh.hidden = true;
-  if (storyAssistantsRefresh) storyAssistantsRefresh.hidden = true;
-  if (characterImageAssistantsRefresh) characterImageAssistantsRefresh.hidden = true;
-  if (materialsRefresh) materialsRefresh.hidden = false;
   title.textContent = materialTypeLabel(activeConfigSection);
   description.textContent = "维护工作区使用的素材定义。工作区只负责选择，配置在这里集中完成。";
   renderMaterialConfigPanel();
@@ -3144,16 +3229,16 @@ async function initConfigCenter() {
     materialConfigs = await fetchMaterialConfigs();
     const params = new URLSearchParams(window.location.search);
     const requestedTab = params.get("tab");
-    activeConfigTab = ["providers", "assistants", "character-image-assistants", "materials"].includes(requestedTab || "")
+    activeConfigTab = ["assistants", "character-image-assistants", "providers", "materials"].includes(requestedTab || "")
       ? requestedTab
-      : "providers";
-    activeConfigSection = activeConfigTab === "providers"
-      ? (providerConfigs[0]?.provider_code || "jimeng")
-      : activeConfigTab === "assistants"
+      : "assistants";
+    activeConfigSection = activeConfigTab === "assistants"
         ? (storyAssistantConfigs[0]?.assistant_code || "")
         : activeConfigTab === "character-image-assistants"
           ? (characterImageAssistantConfigs[0]?.assistant_code || "")
-          : (["visuals", "frames", "characters", "voices", "music"].includes(params.get("section") || "") ? params.get("section") : "visuals");
+          : activeConfigTab === "providers"
+            ? (providerConfigs[0]?.provider_code || "jimeng")
+            : (["visuals", "frames", "characters", "voices", "music"].includes(params.get("section") || "") ? params.get("section") : "visuals");
     renderConfigPanels();
   } catch (error) {
     const list = $("providers_list");
@@ -3162,23 +3247,6 @@ async function initConfigCenter() {
     }
     return;
   }
-
-  $("providers_refresh")?.addEventListener("click", async () => {
-    await loadProviderConfigsIntoState();
-    renderConfigPanels();
-  });
-  $("story_assistants_refresh")?.addEventListener("click", async () => {
-    await loadStoryAssistantConfigsIntoState();
-    renderConfigPanels();
-  });
-  $("character_image_assistants_refresh")?.addEventListener("click", async () => {
-    await loadCharacterImageAssistantConfigsIntoState();
-    renderConfigPanels();
-  });
-  $("materials_refresh")?.addEventListener("click", async () => {
-    materialConfigs = await fetchMaterialConfigs();
-    renderConfigPanels();
-  });
 
   document.addEventListener("change", (event) => {
     if (!pageIsProviders()) return;
@@ -3208,13 +3276,13 @@ async function initConfigCenter() {
     const materialClearButton = event.target.closest("[data-material-clear-file]");
     if (configTabButton) {
       activeConfigTab = configTabButton.dataset.configTab;
-      activeConfigSection = activeConfigTab === "providers"
-        ? (pendingCustomProviderDrafts[0]?.provider_code || providerConfigs[0]?.provider_code || "jimeng")
-        : activeConfigTab === "assistants"
+      activeConfigSection = activeConfigTab === "assistants"
           ? (pendingStoryAssistantDrafts[0]?.id || storyAssistantConfigs[0]?.assistant_code || "")
           : activeConfigTab === "character-image-assistants"
             ? (pendingCharacterImageAssistantDrafts[0]?.id || characterImageAssistantConfigs[0]?.assistant_code || "")
-          : "visuals";
+            : activeConfigTab === "providers"
+              ? (pendingCustomProviderDrafts[0]?.provider_code || providerConfigs[0]?.provider_code || "jimeng")
+              : "visuals";
       renderConfigPanels();
       return;
     }
@@ -3364,6 +3432,10 @@ async function initConfigCenter() {
 
 if (pageIsStudio()) {
   initStudio();
+}
+
+if (pageIsHome()) {
+  initHomePage();
 }
 
 if (pageIsTasks()) {

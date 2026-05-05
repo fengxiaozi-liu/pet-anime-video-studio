@@ -17,25 +17,32 @@
       <a class="topbar-back" href="/">
         <span>←</span> 返回
       </a>
-      <div class="topbar-provider topbar-provider--push">
-        <label for="story_assistant_select">故事助手</label>
-        <div class="topbar-provider__controls">
-          <select id="story_assistant_select"></select>
+      <details class="assistant-config-menu">
+        <summary>
+          <span>助手配置</span>
+          <strong id="assistant_config_summary">正在加载</strong>
+        </summary>
+        <div class="assistant-config-menu__panel" aria-label="助手选择">
+          <div class="topbar-provider">
+            <label for="story_assistant_select">故事助手</label>
+            <div class="topbar-provider__controls">
+              <select id="story_assistant_select"></select>
+            </div>
+          </div>
+          <div class="topbar-provider">
+            <label for="image_assistant_select">生图助手</label>
+            <div class="topbar-provider__controls">
+              <select id="image_assistant_select"></select>
+            </div>
+          </div>
+          <div class="topbar-provider">
+            <label for="studio_provider">视频助手</label>
+            <div class="topbar-provider__controls">
+              <select id="studio_provider"></select>
+            </div>
+          </div>
         </div>
-      </div>
-      <div class="topbar-provider">
-        <label for="image_assistant_select">生图助手</label>
-        <div class="topbar-provider__controls">
-          <select id="image_assistant_select"></select>
-        </div>
-      </div>
-      <div class="topbar-provider">
-        <label for="studio_provider">视频助手</label>
-        <div class="topbar-provider__controls">
-          <select id="studio_provider"></select>
-        </div>
-      </div>
-      <a class="topbar-link" href="/tasks">任务列表</a>
+      </details>
     </header>
     <div class="studio-shell">
       <aside class="studio-column studio-column--assistant">
