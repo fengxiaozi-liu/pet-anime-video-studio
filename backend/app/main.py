@@ -201,7 +201,7 @@ def _serialize_job(job) -> dict[str, Any]:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global security_manager, task_worker
-    logger.info("=== Starting Pet Anime Video Backend ===")
+    logger.info("=== Starting Video Studio Backend ===")
     logger.info("DEBUG: %s", settings.DEBUG)
     logger.info("DATABASE: %s", settings.DATABASE_PATH)
     logger.info("STORAGE: %s (%s)", settings.storage.provider, settings.STORAGE_BASE_DIR)
@@ -249,7 +249,7 @@ async def lifespan(app: FastAPI):
         task_worker.stop()
 
 
-app = FastAPI(title="Pet Anime Video", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="Video Studio", version="0.1.0", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=str(FRONT_ROOT / "static")), name="static")
 app.mount("/media", StaticFiles(directory=str(settings.STORAGE_BASE_DIR)), name="media")
 templates = Jinja2Templates(directory=str(FRONT_ROOT / "templates"))
@@ -287,7 +287,7 @@ def config_page(request: Request):
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy", "service": "pet-anime-video"}
+    return {"status": "healthy", "service": "video-studio"}
 
 
 @app.get("/api/jobs")
@@ -717,7 +717,7 @@ def export_package(job_id: str, _user: str = Depends(authenticated_endpoint)):
     if not zip_path or not zip_path.exists():
         raise HTTPException(status_code=500, detail="failed to generate export package")
 
-    return FileResponse(path=str(zip_path), media_type="application/zip", filename=f"PetClip_{job_id[:8]}_export.zip")
+    return FileResponse(path=str(zip_path), media_type="application/zip", filename=f"VideoStudio_{job_id[:8]}_export.zip")
 
 
 @app.get("/api/jobs/{job_id}/export/cover")

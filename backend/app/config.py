@@ -27,7 +27,7 @@ class SqliteSection(BaseModel):
 class MysqlSection(BaseModel):
     host: str = "127.0.0.1"
     port: int = 3306
-    db: str = "petclip"
+    db: str = "video_studio"
     user: str = "root"
     password: str = ""
 

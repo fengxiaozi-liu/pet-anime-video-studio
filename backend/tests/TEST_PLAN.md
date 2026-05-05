@@ -1,8 +1,8 @@
-# Pet Anime Video - Backend Test Plan
+# Video Studio - Backend Test Plan
 
 ## Overview
 
-This document describes the testing strategy for the pet-anime-video backend API.
+This document describes the testing strategy for the Video Studio backend API.
 
 ## Current Status
 

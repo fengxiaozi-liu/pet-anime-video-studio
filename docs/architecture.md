@@ -1,4 +1,4 @@
-# Pet Anime Video Architecture
+# Video Studio Architecture
 
 ## 概览
 

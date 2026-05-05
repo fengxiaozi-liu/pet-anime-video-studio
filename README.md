@@ -1,6 +1,6 @@
-# Pet Anime Video
+# Video Studio
 
-一个基于 FastAPI 的宠物视频生成项目。当前仓库形态是“后端服务 + 服务端模板页面”，页面资源放在 `front/` 下，由后端直接挂载，不包含独立的前端构建工程。
+一个基于 FastAPI 的基础视频创作工具。当前仓库形态是“后端服务 + 服务端模板页面”，页面资源放在 `front/` 下，由后端直接挂载，不包含独立的前端构建工程。
 
 ## 项目简介
 
@@ -11,15 +11,15 @@
 - `docker-compose.yml` 与根目录 `Dockerfile`：本地容器化启动入口
 - `config.yaml`：默认运行配置
 
-当前代码里网页入口和 API 都由同一个服务提供，默认地址为 `http://127.0.0.1:8000`，接口文档为 `http://127.0.0.1:8000/docs`。
+网页入口和 API 都由同一个服务提供，默认地址为 `http://127.0.0.1:8000`，接口文档为 `http://127.0.0.1:8000/docs`。
 
 ## 本地启动
 
 推荐只保留一个虚拟环境位置。默认使用仓库根目录 `.venv/`，不要再在 `backend/` 下额外创建 `.venv/`。
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
+python -m venv .venv
+.venv/Scripts/activate
 pip install -r backend/requirements.txt
 cd backend
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
@@ -29,14 +29,14 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 - 首页：`http://127.0.0.1:8000/`
 - 工作台：`http://127.0.0.1:8000/studio`
+- 任务列表：`http://127.0.0.1:8000/tasks`
+- 配置中心：`http://127.0.0.1:8000/config`
 - 健康检查：`http://127.0.0.1:8000/health`
 - OpenAPI 文档：`http://127.0.0.1:8000/docs`
 
-默认配置来自根目录 `config.yaml`。如果只做本地渲染，可先不配置云端 provider；如果要创建云端任务，当前代码仅支持 `jimeng` provider，需要在 `config.yaml` 中启用对应凭据。
+默认配置来自根目录 `config.yaml`。如果只做本地流程验证，可以先不配置云端 provider；如果要创建云端任务，请在 `config.yaml` 中启用对应凭据。
 
 ## Docker 启动
-
-根目录已经统一为 Docker 构建入口：
 
 ```bash
 docker-compose up -d --build
@@ -57,18 +57,26 @@ docker-compose down
 
 ## 快速使用
 
-最直接的使用方式是先启动服务，再访问 `/docs` 或网页端。
+最直接的使用方式是先启动服务，再进入 `/studio`：
+
+1. 输入视频创意或脚本方向
+2. 生成并编辑故事、角色和分镜
+3. 选择画面风格、首尾帧、配音和音乐
+4. 提交视频生成任务
+5. 在 `/tasks` 查看结果、封面和导出包
 
 创建任务时，当前 `/api/jobs` 接口以表单提交为主，常用字段包括：
 
 - `prompt`
-- `backend`，当前可用值以后端实现为准，默认 `cloud`
-- `provider`，当前仅支持 `jimeng`
+- `backend`
+- `provider`
 - `template_id`
 - `storyboard_json`
 - `subtitles`
 - `bgm_volume`
 - `bgm`
+- `opening_frame`
+- `ending_frame`
 
 也可以先检查 provider 和模板：
 
@@ -83,17 +91,15 @@ curl http://127.0.0.1:8000/api/platform-templates
 ## 目录结构
 
 ```text
-pet-anime-video/
+video-studio/
 ├── backend/
 │   ├── app/
 │   ├── tests/
 │   └── requirements.txt
 ├── front/
 │   ├── templates/
-│   ├── static/
-│   └── htmlcov/
+│   └── static/
 ├── docs/
-│   └── architecture.md
 ├── Dockerfile
 ├── docker-compose.yml
 ├── config.yaml

@@ -23,8 +23,8 @@ from app.export_package import (
 
 class TestCaptionGeneration:
     def test_generate_caption_from_prompt(self):
-        caption = _generate_caption("我家猫咪今天超可爱", "douyin")
-        assert "我家猫咪今天超可爱" in caption
+        caption = _generate_caption("城市宣传短片开场镜头", "douyin")
+        assert "城市宣传短片开场镜头" in caption
         assert len(caption) <= 150
 
     def test_generate_caption_truncates_long_prompt(self):
@@ -68,15 +68,15 @@ class TestHashtagGeneration:
 
     def test_douyin_has_required_tag(self):
         tags = _get_hashtags("douyin")
-        assert "#宠物" in tags
+        assert "#短视频" in tags
 
     def test_xiaohongshu_has_required_tag(self):
         tags = _get_hashtags("xiaohongshu")
-        assert "#宠物" in tags
+        assert "#短视频创作" in tags
 
     def test_unknown_platform_falls_back_to_douyin(self):
         tags = _get_hashtags("unknown")
-        assert "#宠物" in tags
+        assert "#短视频" in tags
 
 
 class TestProjectJson:

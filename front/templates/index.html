@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>PetClip Studio</title>
+    <title>Video Studio</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -15,13 +15,14 @@
   <body data-page="home" class="page-home">
     <header class="marketing-header">
       <a class="marketing-brand" href="/">
-        <span class="marketing-brand__mark">PC</span>
+        <span class="marketing-brand__mark">VS</span>
         <span class="marketing-brand__text">
-          <strong>PetClip Studio</strong>
-          <span>Anime Story Lab</span>
+          <strong>Video Studio</strong>
+          <span>AI Video Workspace</span>
         </span>
       </a>
       <nav class="marketing-nav">
+        <a href="#workflow">创作流程</a>
         <a href="#features">能力模块</a>
         <a href="/config">配置中心</a>
         <a class="btn btn--ghost" href="/studio">进入工作台</a>
@@ -31,27 +32,29 @@
     <main class="marketing-main">
       <section class="hero-shell">
         <div class="hero-copy">
-          <div class="eyebrow">首页</div>
-          <h1>从灵感到分镜成片，统一收进一个轻量视频工作台。</h1>
+          <div class="eyebrow">Video Workspace</div>
+          <h1>从一个想法开始，完成脚本、分镜、素材选择与视频生成。</h1>
           <p>
-            现在的体验被拆成两个层级：先在首页了解能力与入口，再进入成片工作台，用助手生成故事、编辑分镜、挑选角色和声音、完成视频设置与生成。
+            Video Studio 是一个基础视频创作工作台。你可以用自然语言生成策划草稿，
+            编辑分镜脚本，绑定角色、画面、配音和音乐，并把任务提交到已配置的视频生成服务。
           </p>
           <div class="hero-actions">
-            <a class="btn btn--primary" href="/studio">进入成片助手</a>
-            <a class="btn btn--secondary" href="#features">查看模块结构</a>
+            <a class="btn btn--primary" href="/studio">开始创作</a>
+            <a class="btn btn--secondary" href="/tasks">查看任务</a>
+            <a class="btn btn--ghost" href="/config">检查配置</a>
           </div>
           <div class="hero-stats">
             <div class="hero-stat">
-              <strong>7</strong>
-              <span>核心模块</span>
+              <strong>3 步</strong>
+              <span>想法、分镜、生成</span>
             </div>
             <div class="hero-stat">
-              <strong>3 栏</strong>
-              <span>工作台布局</span>
+              <strong>5 类素材</strong>
+              <span>画面 / 首尾帧 / 角色 / 配音 / 音乐</span>
             </div>
             <div class="hero-stat">
-              <strong>Mock Ready</strong>
-              <span>角色 / 配音 / 音乐库</span>
+              <strong>可扩展</strong>
+              <span>对接多种视频与 AI 助手</span>
             </div>
           </div>
         </div>
@@ -63,10 +66,10 @@
             </div>
             <div class="hero-preview__body">
               <div class="hero-preview__sidebar">
-                <div class="hero-preview__bubble hero-preview__bubble--right">还原长安城的盛世风貌</div>
+                <div class="hero-preview__bubble hero-preview__bubble--right">生成一支城市宣传短片</div>
                 <div class="hero-preview__card">
-                  <strong>策划案已生成</strong>
-                  <span>故事摘要、角色建议、分镜草稿</span>
+                  <strong>策划草稿已生成</strong>
+                  <span>故事摘要、镜头建议、角色与画面设定</span>
                 </div>
                 <div class="hero-preview__composer"></div>
               </div>
@@ -93,71 +96,71 @@
         </div>
       </section>
 
-      <section class="marketing-section" id="features">
+      <section class="marketing-section marketing-section--flow" id="workflow">
         <div class="section-heading">
-          <div class="eyebrow">能力模块</div>
-          <h2>按你要的结构，重建成更清晰的创作路径。</h2>
-        </div>
-        <div class="feature-grid">
-          <article class="feature-card">
-            <span>01</span>
-            <h3>首页</h3>
-            <p>承接品牌、能力说明、案例入口与进入工作台的主 CTA。</p>
-          </article>
-          <article class="feature-card">
-            <span>02</span>
-            <h3>助手页面</h3>
-            <p>通过自然语言输入生成故事摘要、脚本草稿和分镜建议。</p>
-          </article>
-          <article class="feature-card">
-            <span>03</span>
-            <h3>故事与分镜</h3>
-            <p>上方内容概览可编辑，下方分镜卡片联动修改与重排。</p>
-          </article>
-          <article class="feature-card">
-            <span>04</span>
-            <h3>视频设置</h3>
-            <p>统一管理画面风格、分镜类型、比例、模板、字幕和音量。</p>
-          </article>
-          <article class="feature-card">
-            <span>05</span>
-            <h3>角色选择列表</h3>
-            <p>按角色分组浏览与搜索，支持快速选择并应用到当前分镜。</p>
-          </article>
-          <article class="feature-card">
-            <span>06</span>
-            <h3>配音库</h3>
-            <p>用 mock 数据先把选择流和界面骨架走通，后续再接真实接口。</p>
-          </article>
-          <article class="feature-card">
-            <span>07</span>
-            <h3>音乐素材库</h3>
-            <p>支持推荐音乐、无音乐和本地 BGM 文件上传并行存在。</p>
-          </article>
-        </div>
-      </section>
-
-      <section class="marketing-section marketing-section--flow" id="flow">
-        <div class="section-heading">
-          <div class="eyebrow">创作流程</div>
-          <h2>首页负责进入，工作台负责落地。</h2>
+          <div class="eyebrow">Workflow</div>
+          <h2>首页负责快速进入，工作台负责完成创作。</h2>
         </div>
         <div class="flow-grid">
           <div class="flow-step">
             <strong>Step 1</strong>
-            <h3>输入想法</h3>
-            <p>描述主题、情绪、风格与人物关系，先形成一版可用策划案。</p>
+            <h3>输入视频想法</h3>
+            <p>描述主题、风格、场景、人物或镜头目标，先得到一版可编辑的策划草稿。</p>
           </div>
           <div class="flow-step">
             <strong>Step 2</strong>
-            <h3>编辑故事和分镜</h3>
-            <p>把摘要、脚本和分镜卡片统一在中栏里调整，形成稳定 storyboard。</p>
+            <h3>编辑脚本与分镜</h3>
+            <p>在工作台中整理故事正文、镜头脚本、字幕、角色和画面提示词。</p>
           </div>
           <div class="flow-step">
             <strong>Step 3</strong>
-            <h3>挑选资源与生成</h3>
-            <p>在右栏选择画风、角色、配音、音乐，最终提交到现有生成链路。</p>
+            <h3>选择素材并生成</h3>
+            <p>配置画面风格、首尾帧、角色、配音、音乐和平台模板，然后提交生成任务。</p>
           </div>
+        </div>
+      </section>
+
+      <section class="marketing-section" id="features">
+        <div class="section-heading">
+          <div class="eyebrow">Modules</div>
+          <h2>围绕视频生成闭环组织能力，而不是绑定单一内容品类。</h2>
+        </div>
+        <div class="feature-grid">
+          <article class="feature-card">
+            <span>01</span>
+            <h3>创作助手</h3>
+            <p>通过自然语言生成故事摘要、脚本草稿、角色建议和分镜结构。</p>
+          </article>
+          <article class="feature-card">
+            <span>02</span>
+            <h3>脚本编辑</h3>
+            <p>集中编辑策划正文、分镜卡片、字幕文案和镜头时长。</p>
+          </article>
+          <article class="feature-card">
+            <span>03</span>
+            <h3>素材库</h3>
+            <p>管理画面风格、首尾帧、角色、配音和音乐，支持复用与配置。</p>
+          </article>
+          <article class="feature-card">
+            <span>04</span>
+            <h3>角色绑定</h3>
+            <p>把角色资产绑定到具体分镜，让多镜头内容保持一致。</p>
+          </article>
+          <article class="feature-card">
+            <span>05</span>
+            <h3>视频设置</h3>
+            <p>统一处理比例、平台模板、字幕、音量和生成服务选择。</p>
+          </article>
+          <article class="feature-card">
+            <span>06</span>
+            <h3>任务追踪</h3>
+            <p>查看最近任务、分镜提交状态、生成结果、封面和导出包。</p>
+          </article>
+          <article class="feature-card">
+            <span>07</span>
+            <h3>配置中心</h3>
+            <p>集中管理故事助手、生图助手、视频助手和素材资源。</p>
+          </article>
         </div>
       </section>
     </main>

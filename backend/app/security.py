@@ -1,4 +1,4 @@
-"""Security module for Pet Anime Video Backend.
+"""Security module for Video Studio Backend.
 
 Provides:
 - API Key Authentication

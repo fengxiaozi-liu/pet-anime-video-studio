@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  pet-anime-video:
+  video-studio:
     build:
       context: .
       dockerfile: Dockerfile
@@ -11,7 +11,7 @@ services:
       timeout: 10s
       retries: 3
       start_period: 15s
-    container_name: pet-anime-video
+    container_name: video-studio
     restart: unless-stopped
     
     ports:
@@ -54,8 +54,8 @@ services:
           memory: 512M
     
     networks:
-      - pet-anime-network
+      - video-studio-network
 
 networks:
-  pet-anime-network:
+  video-studio-network:
     driver: bridge

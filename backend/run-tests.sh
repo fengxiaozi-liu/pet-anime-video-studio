@@ -1,8 +1,8 @@
 #!/bin/bash
-# Test runner script for pet-anime-video backend
+# Test runner script for Video Studio backend
 set -e
 
-echo "🧪 Running Pet Anime Video Backend Tests"
+echo "🧪 Running Video Studio Backend Tests"
 echo "========================================="
 echo ""
 

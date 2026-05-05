@@ -11,7 +11,7 @@ database:
   mysql:
     host: "127.0.0.1"
     port: 3306
-    db: "petclip"
+    db: "video_studio"
     user: "root"
     password: ""
 

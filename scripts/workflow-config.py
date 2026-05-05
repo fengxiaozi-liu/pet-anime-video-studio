@@ -1,4 +1,4 @@
-# Workflow Config - Pet Anime Video 自动化优化工作流
+# Workflow Config - Video Studio 自动化优化工作流
 # 目标: 将生图助手重构为父子类模型，兼容不同类型的文生图 API
 
 TASKS = [

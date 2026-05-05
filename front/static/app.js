@@ -642,7 +642,7 @@ function setDownloadState(enabled, href = "#") {
 }
 
 function buildDraftFromPrompt(prompt) {
-  const clean = (prompt || "").trim() || "温暖的宠物奇遇故事";
+  const clean = (prompt || "").trim() || "一支有清晰主题的短视频";
   const style = styleById(state.visualStyleId);
   const leadNames = charactersByIds(state.characterIds).map((item) => item.name).join("、") || "主角";
   const scenes = [
@@ -2859,7 +2859,7 @@ function renderMaterialFields(type, item, prefix) {
     fields.push(`
       <label class="provider-field">
         <span>分组</span>
-        <input type="text" data-material-field="${prefix}:group_name" value="${item.group_name || "默认分组"}" placeholder="例如：默认分组 / 主角 / 配角 / 宠物" />
+        <input type="text" data-material-field="${prefix}:group_name" value="${item.group_name || "默认分组"}" placeholder="例如：默认分组 / 主角 / 配角 / 品牌角色" />
       </label>
     `);
   }
